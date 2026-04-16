@@ -1,14 +1,10 @@
 import express from 'express';
-import { createServer as createViteServer } from 'vite';
 import { WebSocketServer, WebSocket } from 'ws';
 import http from 'http';
 import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import os from 'os';
 
 const PORT = 3000;
 
@@ -34,19 +30,19 @@ interface Session {
 const sessions = new Map<string, Session>();
 const agents = new Map<string, Agent>();
 
-// Rate limiting for code attempts
-const failedAttempts = new Map<string, { count: number, lastAttempt: number }>();
-const MAX_FAILED_ATTEMPTS = 5;
-const LOCKOUT_TIME = 15 * 60 * 1000; // 15 minutes
+  // Rate limiting for code attempts
+  const failedAttempts = new Map<string, { count: number, lastAttempt: number }>();
+  const MAX_FAILED_ATTEMPTS = 5;
+  const LOCKOUT_TIME = 15 * 60 * 1000; // 15 minutes
 
-// Admin token (in production this should be more robust)
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
-let currentAdminToken = uuidv4();
+  // Admin token
+  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+  let currentAdminToken = uuidv4();
 
-// Generate a random 6-digit code
-function generateCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
+  // Generate a random 6-digit code
+  function generateCode() {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  }
 
 async function startServer() {
   const app = express();
@@ -66,20 +62,10 @@ async function startServer() {
 
   // Health check
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: Date.now() });
+    res.json({ status: 'ok', timestamp: Date.now(), version: '1.0.0' });
   });
 
-  // Auth Middleware
-  const adminAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const token = req.headers['authorization'];
-    if (token === currentAdminToken) {
-      next();
-    } else {
-      res.status(401).json({ error: 'Unauthorized' });
-    }
-  };
-
-  // Login Route
+  // API Routes
   app.post('/api/login', (req, res) => {
     const { password } = req.body;
     if (password === ADMIN_PASSWORD) {
@@ -87,24 +73,6 @@ async function startServer() {
     } else {
       res.status(401).json({ error: 'Invalid password' });
     }
-  });
-
-  // API Routes
-  app.post('/api/sessions', (req, res) => {
-    const sessionId = uuidv4();
-    const code = generateCode();
-    sessions.set(code, {
-      id: sessionId,
-      code,
-      createdAt: Date.now(),
-    });
-    res.json({ sessionId, code });
-  });
-
-  // GET sessions is now open to all authenticated users (or anyone if user wants)
-  // But we'll keep it simple: allow if they have ANY token or are just logged in
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: Date.now() });
   });
 
   app.get('/api/sessions', (req, res) => {
@@ -120,10 +88,65 @@ async function startServer() {
     res.json(activeSessions);
   });
 
+  app.post('/api/sessions', (req, res) => {
+    const sessionId = uuidv4();
+    const code = generateCode();
+    sessions.set(code, {
+      id: sessionId,
+      code,
+      createdAt: Date.now(),
+    });
+    res.json({ sessionId, code });
+  });
+
+  app.put('/api/sessions/:id/refresh', (req, res) => {
+    const sessionId = req.params.id;
+    let targetSession: Session | null = null;
+    let oldCode: string | null = null;
+
+    for (const [code, session] of sessions.entries()) {
+      if (session.id === sessionId) {
+        targetSession = session;
+        oldCode = code;
+        break;
+      }
+    }
+
+    if (!targetSession || !oldCode) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    if (targetSession.techAgent) {
+      return res.status(400).json({ error: 'Cannot refresh code while tech is connected' });
+    }
+
+    const newCode = generateCode();
+    sessions.delete(oldCode);
+    targetSession.code = newCode;
+    sessions.set(newCode, targetSession);
+
+    res.json({ sessionId: targetSession.id, code: newCode });
+  });
+
+  app.get('/api/network-interfaces', (req, res) => {
+    const interfaces = os.networkInterfaces();
+    const result: { name: string, ip: string, family: string, internal: boolean }[] = [];
+    for (const [name, infos] of Object.entries(interfaces)) {
+      if (infos) {
+        for (const info of infos) {
+          if (info.family === 'IPv4') {
+            result.push({ name, ip: info.address, family: info.family, internal: info.internal });
+          }
+        }
+      }
+    }
+    result.sort((a, b) => (a.internal === b.internal ? 0 : a.internal ? 1 : -1));
+    res.json(result);
+  });
+
   app.delete('/api/sessions/:id', (req, res) => {
     const sessionId = req.params.id;
     let sessionCodeToDelete: string | null = null;
-    
     for (const [code, session] of sessions.entries()) {
       if (session.id === sessionId) {
         sessionCodeToDelete = code;
@@ -132,13 +155,17 @@ async function startServer() {
         break;
       }
     }
-    
     if (sessionCodeToDelete) {
       sessions.delete(sessionCodeToDelete);
       res.json({ success: true });
     } else {
       res.status(404).json({ error: 'Session not found' });
     }
+  });
+
+  // API 404 handler - catch anything starting with /api that reaching here
+  app.use('/api', (req, res) => {
+    res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
   });
 
   // WebSocket Logic
@@ -297,23 +324,32 @@ async function startServer() {
     }
   }, 60000);
 
-  // Vite middleware for development
+  // API 404 handler
+  app.all('/api/*', (req, res) => {
+    res.status(404).json({ error: `API route not found: ${req.method} ${req.url}` });
+  });
+
+  // Static files and SPA fallback
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = process.env.DIST_PATH || path.join(process.cwd(), 'dist');
+    console.log(`Serving static files from: ${distPath}`);
     app.use(express.static(distPath));
+    
+    // SPA fallback
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
 }
 
