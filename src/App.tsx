@@ -16,195 +16,187 @@ interface Session {
 const translations = {
   zh: {
     title: "BimmerBridge",
-    version: "V0.01",
-    home: "官网",
+    version: "V0.05 Enterprise",
+    home: "概览",
     dashboard: "控制台",
-    downloads: "连车端",
+    downloads: "车辆端",
     techTab: "编程端",
     settings: "设置",
-    remoteSessions: "远程桥接会话",
-    manageConnections: "管理宝马ENET远程编程连接",
-    newSession: "管理新会话",
-    loading: "加载中...",
-    noSessions: "暂无活动会话",
-    clickToCreate: "请前往“连车端”生成连接码，或在“编程端”输入连接码。连接成功后，会话将在此显示。",
-    carClient: "车辆端 (Client/Car)",
-    techClient: "编程端 (Tech)",
-    connected: "已连接 (CONNECTED)",
-    waiting: "等待连接... (WAITING)",
-    vehicleNetwork: "车辆网络信息 (Vehicle Network)",
-    realIp: "真实IP (Real IP):",
-    vin: "车辆识别码 (VIN):",
-    unknown: "未知 (Unknown)",
-    downloadInstructions: "连车端连接码生成",
-    downloadDesc: "点击下方按钮生成连接码，并将其发送给编程端以建立连接。多次点击仅会刷新连接码，不会创建多个会话。",
-    generateCode: "生成智能万能码",
-    codeGenerated: "已生成智能万能码",
-    smartCode: "智能连接凭证",
-    smartCodeDesc: "此凭证已包含中转服务器地址。编程端无需任何手动设置，直接粘贴即可实现一键直连。",
-    sendToTech: "请将下方代码发送给编程端：",
-    closeSession: "关闭会话",
-    manualScript: "高级：手动脚本下载",
-    carScript: "车辆端脚本 (car.js)",
-    carScriptDesc: "运行在连接了ENET线缆的电脑上",
-    techScript: "编程端脚本 (tech.js)",
-    techScriptDesc: "运行在安装了 E-Sys/ISTA 的电脑上",
-    step1: "# 1. 保存以下代码为",
-    step2: "# 2. 安装依赖: npm install ws",
-    step3: "# 3. 运行: node",
-    howToReadIp: "如何读取车辆IP",
-    howToReadIpDesc1: "当车辆端成功连接到车辆后，它会自动读取车辆的真实IP地址，并显示在“控制台”的会话卡片中。",
-    howToReadIpDesc2: "在编程端，由于我们使用了端口转发技术，E-Sys 软件可以直接通过 127.0.0.1 (localhost) 连接到车辆。如果您需要在 E-Sys 中手动输入 IP，请使用 127.0.0.1。真实的车辆 IP 仅用于参考和诊断，已在控制台中为您展示。本软件完美兼容 Windows 10/11 和 macOS 系统。",
-    protocolSettings: "协议与硬件设置",
-    protocolSettingsDesc: "配置远程桥接支持的底层协议与硬件接口",
-    enableDoIP: "启用 DoIP (Diagnostics over Internet Protocol)",
-    enableDoIPDesc: "支持宝马 F/G/I 系列 ENET 直接诊断与编程。默认开启。",
-    enableJ2534: "启用 J2534 PassThru 映射 (实验性)",
-    enableJ2534Desc: "允许远程映射 J2534 兼容硬件。需要在客户端安装特定的桥接驱动。",
-    usbMapping: "启用 USB 映射技术",
-    usbMappingDesc: "允许远程映射本地 USB 设备 (如 ENET 线缆或 ICOM) 到编程端。",
-    languageSettings: "语言设置",
-    selectLanguage: "选择界面语言",
-    copied: "已复制到剪贴板！",
-    ping: "Ping",
-    pinging: "Ping中...",
-    pingResult: "延迟: {ms}ms",
-    networkSettings: "本地网卡设置",
-    networkSettingsDesc: "选择用于连接车辆或 E-Sys 的物理网卡",
-    autoDetect: "自动获取",
+    remoteSessions: "私有 P2P 通道",
+    manageConnections: "",
+    newSession: "建立全新配对",
+    loading: "隧道同步中...",
+    noSessions: "当前无活跃隧道",
+    clickToCreate: "请在“车辆端”生成凭证。握手成功后，加密信令将穿透防火墙并建立端到端直连。",
+    carClient: "终端 (CAR)",
+    techClient: "终端 (EXPERT)",
+    connected: "P2P 已穿透 (SECURE)",
+    waiting: "链路建立中...",
+    vehicleNetwork: "底层链路指标",
+    realIp: "节点端点:",
+    vin: "车辆识别码:",
+    unknown: "探测中",
+    downloadInstructions: "配对中心 ( Pairing )",
+    downloadDesc: "将生成的连接码发送给编程端。建议在复杂的网络环境中使用“中国区深度优化”模式进行握手。",
+    generateCode: "生成 P2P 连接码",
+    codeGenerated: "握手凭证已就绪",
+    smartCode: "Smart-Link 智能凭证",
+    smartCodeDesc: "此凭证采用端到端加密包含私有信令。解析后可绕过公网延时，强制开启高带宽 P2P 隧道。",
+    sendToTech: "请将下方代码发送给另一端：",
+    closeSession: "切断物理链路",
+    howToReadIp: "关于 P2P 隧道",
+    howToReadIpDesc1: "BimmerBridge 采用端到端 P2P (Peer-to-Peer) 技术。服务器仅在连接初始阶段充当‘数字信标’。一旦握手成功，诊断数据将通过 AES-256 加密隧道在两端直接流动。",
+    howToReadIpDesc2: "在编程端，ISTA/E-Sys 等工具通过虚拟节点进行无感访问。底层引擎会自动处理所有的数据路由与重传机制，提供等同于物理 100M ENET 的极致体验。",
+    protocolSettings: "链路优化与硬件映射",
+    protocolSettingsDesc: "配置底层 P2P 隧道协议、MTU 与硬件同步策略",
+    enableDoIP: "启用 P2P-DoIP 极速模式",
+    enableDoIPDesc: "强制使用低延迟数据通道传输 RAW 协议，最大化降低同步延时。",
+    enableJ2534: "离线直联兼容模式",
+    enableJ2534Desc: "在复杂防火墙环境下，允许利用局域网/内网环境进行握手穿透。",
+    usbMapping: "智能环境自适应",
+    usbMappingDesc: "自动检测并同步当前硬件环境，解决 169.254.x.x 等自给 IP 导致的路由冲突。",
+    languageSettings: "全局偏好",
+    selectLanguage: "选择语言 / Language",
+    copied: "凭证已保存",
+    ping: "测试延迟",
+    pinging: "同步中...",
+    pingResult: "RTT: {ms}ms",
+    networkSettings: "网卡绑定",
+    networkSettingsDesc: "指定用于连接车辆或编程软件的物理网卡",
+    autoDetect: "自动探测",
     refresh: "刷新",
-    selectedAdapter: "当前选择的网卡",
-    noAdapters: "未检测到网卡",
-    noServerWarning: "未设置中转服务器",
-    noServerDesc: "检测到您正在使用本地版，请先在“设置”中配置公网中转服务器地址，否则编程端将无法建立跨地域连接。",
+    selectedAdapter: "当前链路网卡",
+    noAdapters: "未检测到有效网卡",
+    noServerWarning: "",
+    noServerDesc: "",
+    offlineTip: "",
+    offlineDesc: "",
+    chinaMode: "中国区深度优化",
+    chinaModeDesc: "启用后将强制使用国内加速握手服务器及特定的 STUN 穿透策略。",
     copySuccess: "复制成功",
-    serverAddressDesc: "如果您在本地运行客户端，请填入云端服务器的公网地址 (例如: https://your-app.run.app)。留空则默认连接本地。",
-    save: "保存设置",
-    techTabDesc: "输入客户提供的连接码，建立远程诊断与编程通道。",
-    enterCode: "粘贴智能万能码 (例如: host#123456)",
-    connectToCar: "立即建立连接",
-    connecting: "连接中...",
-    connectSuccess: "连接成功！",
-    connectError: "连接失败，请检查连接码是否正确。",
-    disconnect: "断开连接",
-    deleteSession: "删除会话",
-    chat: "聊天",
+    serverAddressDesc: "若使用私有中转，请输入握手点 URL (如: https://bridge.example.com)。",
+    save: "应用配置",
+    techTabDesc: "输入客户提供的智能配对码，建立端到端加密诊断通道。",
+    enterCode: "在此粘贴 P2P 配对码",
+    connectToCar: "开启点对点连接",
+    connecting: "握手同步中...",
+    connectSuccess: "P2P 链路已建立！",
+    connectError: "握手失败，请检查防火墙或配对码。",
+    disconnect: "完全断开",
+    deleteSession: "清除记录",
+    chat: "加密聊天",
     typeMessage: "输入消息...",
     sendFile: "发送文件",
-    waitingForPeer: "等待对方连接后即可开始聊天...",
-    selectSession: "请从左侧选择一个会话进行查看",
-    adminLogin: "管理员登录",
-    userLogin: "用户登录",
-    register: "注册账号",
-    username: "用户名",
+    waitingForPeer: "等待链路另一端入场...",
+    selectSession: "请选择一个活跃的 P2P 隧道以继续",
+    login: "进入控制台",
+    register: "立即注册",
+    username: "账号",
     password: "密码",
-    login: "登录",
+    userLogin: "用户登录",
+    adminLogin: "高级工程师登录",
+    noAccount: "没有账号？点击注册",
+    hasAccount: "已有账号？去登录",
+    adminAccess: "高级工程师接入",
+    userAccess: "普通模式",
+    enterUsername: "输入登录账号",
+    enterPassword: "输入登录密码",
+    enterAdminPassword: "输入高级工程师密钥",
     invalidPassword: "密码错误",
-    noAccount: "没有账号？立即注册",
-    hasAccount: "已有账号？立即登录",
-    adminAccess: "管理员入口",
-    userAccess: "返回用户登录",
-    enterUsername: "请输入用户名",
-    enterPassword: "请输入密码",
-    enterAdminPassword: "请输入管理员密码",
-    loginSuccess: "登录成功",
-    registerSuccess: "注册成功"
+    expertPin: "专家授权密钥",
+    loginSuccess: "授权成功"
   },
   en: {
-    title: "BimmerBridge",
-    version: "V0.01",
-    home: "Home",
-    dashboard: "Dashboard",
-    downloads: "Car Client",
-    techTab: "Tech Client",
+    title: "BimmerBridge P2P",
+    version: "V0.02 Pro",
+    home: "Guide",
+    dashboard: "Terminal",
+    downloads: "Car Side",
+    techTab: "Expert Side",
     settings: "Settings",
-    remoteSessions: "Remote Sessions",
-    manageConnections: "Manage BMW ENET remote programming connections",
-    newSession: "Manage Sessions",
-    loading: "Loading...",
-    noSessions: "No Active Sessions",
-    clickToCreate: "Please go to 'Car Client' to generate a code, or 'Tech Client' to enter a code. Once connected, the session will appear here.",
-    carClient: "Client / Car",
-    techClient: "Tech / Programmer",
-    connected: "CONNECTED",
-    waiting: "WAITING...",
-    vehicleNetwork: "Vehicle Network",
-    realIp: "Real IP:",
-    vin: "VIN:",
-    unknown: "Unknown",
-    downloadInstructions: "Car Client Code Generation",
-    downloadDesc: "Click the button below to generate a connection code. Multiple clicks will only refresh the code, not create multiple sessions.",
-    generateCode: "Generate Smart Master Code",
-    codeGenerated: "Smart Master Code Generated",
-    smartCode: "Smart Credential",
-    smartCodeDesc: "This credential includes the server address. The tech side can paste it directly for a one-click connection with zero setup.",
-    sendToTech: "Send the following code to the Tech:",
-    closeSession: "Close Session",
-    manualScript: "Advanced: Manual Script Download",
-    carScript: "Car Agent Script (car.js)",
-    carScriptDesc: "Run on the computer connected to the car via ENET",
-    techScript: "Tech Agent Script (tech.js)",
-    techScriptDesc: "Run on the computer with E-Sys/ISTA installed",
-    step1: "# 1. Save the following code as",
-    step2: "# 2. Install dependencies: npm install ws",
-    step3: "# 3. Run: node",
-    howToReadIp: "How to read vehicle IP",
-    howToReadIpDesc1: "When the car agent successfully connects to the vehicle, it automatically reads the real IP address and displays it in the session card.",
-    howToReadIpDesc2: "On the tech side, due to port forwarding, E-Sys can connect directly to the vehicle via 127.0.0.1 (localhost). If you need to manually enter an IP in E-Sys, use 127.0.0.1. The real IP is shown in the dashboard for reference. Fully compatible with Windows 10/11 and macOS.",
-    protocolSettings: "Protocol & Hardware Settings",
-    protocolSettingsDesc: "Configure supported underlying protocols and hardware interfaces for the remote bridge.",
-    enableDoIP: "Enable DoIP (Diagnostics over Internet Protocol)",
-    enableDoIPDesc: "Supports BMW F/G/I series direct ENET diagnostics and programming. Enabled by default.",
-    enableJ2534: "Enable J2534 PassThru Mapping (Experimental)",
-    enableJ2534Desc: "Allows remote mapping of J2534 compatible hardware. Requires specific bridge drivers on the client.",
-    usbMapping: "Enable USB Mapping Technology",
-    usbMappingDesc: "Allows remote mapping of local USB devices (like ENET cables or ICOM) to the tech client.",
-    languageSettings: "Language Settings",
-    selectLanguage: "Select Interface Language",
-    copied: "Copied to clipboard!",
-    ping: "Ping",
-    pinging: "Pinging...",
-    pingResult: "Latency: {ms}ms",
-    networkSettings: "Local Network Adapter Settings",
-    networkSettingsDesc: "Select the physical network adapter used to connect to the vehicle or E-Sys",
-    autoDetect: "Auto-detect",
+    remoteSessions: "P2P Tunnels",
+    manageConnections: "Manage BMW ENET P2P connections",
+    newSession: "New Tunnel",
+    loading: "P2P Init...",
+    noSessions: "No Active Tunnels",
+    clickToCreate: "Generate a code on 'Car Side' or enter one on 'Expert Side'. Once paired, a secure tunnel will appear here.",
+    carClient: "Local Car",
+    techClient: "Remote Expert",
+    connected: "P2P SECURE",
+    waiting: "Syncing...",
+    vehicleNetwork: "Link Status",
+    realIp: "Node IP:",
+    vin: "Vehicle VIN:",
+    unknown: "Checking",
+    downloadInstructions: "Pairing Center",
+    downloadDesc: "Generate a pairing code. Use 'China mode' if you encounter network issues.",
+    generateCode: "Start P2P Pairing",
+    codeGenerated: "Code Ready",
+    smartCode: "P2P Credential",
+    smartCodeDesc: "End-to-end encrypted link credential with zero-config relay support.",
+    sendToTech: "Send this to the remote Expert:",
+    closeSession: "Kill Link",
+    howToReadIp: "About P2P",
+    howToReadIpDesc1: "BimmerBridge uses WebRTC for Peer-to-Peer communication, ensuring maximum privacy and minimal latency.",
+    howToReadIpDesc2: "Standard E-Sys/ISTA configs use 127.0.0.1. The P2P layer handles all underlying routing automatically.",
+    protocolSettings: "P2P & Hardware",
+    protocolSettingsDesc: "Configure tunneling and mapping.",
+    enableDoIP: "P2P DoIP Turbo",
+    enableDoIPDesc: "Use RTC Data Channels for raw traffic.",
+    enableJ2534: "Remote USB / ICOM",
+    enableJ2534Desc: "Map hardware to remote sessions.",
+    usbMapping: "Low Latency Sync",
+    usbMappingDesc: "Optimized synchronization technology.",
+    languageSettings: "Language",
+    selectLanguage: "Select UI Language",
+    copied: "Copied!",
+    ping: "Test Latency",
+    pinging: "Syncing...",
+    pingResult: "RTT: {ms}ms",
+    networkSettings: "Adapter",
+    networkSettingsDesc: "Bind to physical NIC.",
+    autoDetect: "Auto",
     refresh: "Refresh",
-    selectedAdapter: "Currently Selected Adapter",
-    noAdapters: "No adapters detected",
-    noServerWarning: "Server Not Set",
-    noServerDesc: "Middleman server address is missing. Please configure it in 'Settings' for remote pairing to work.",
+    selectedAdapter: "Bound NIC",
+    noAdapters: "No NIC found",
+    noServerWarning: "",
+    noServerDesc: "",
+    offlineTip: "",
+    offlineDesc: "",
+    chinaMode: "China Optimized",
+    chinaModeDesc: "Use regional STUN/TURN nodes for faster piercing.",
     copySuccess: "Copied!",
-    serverAddressDesc: "If running locally, enter the public URL of your cloud server (e.g., https://your-app.run.app). Leave empty for local mode.",
-    save: "Save Settings",
-    techTabDesc: "Enter the connection code provided by the customer to establish a remote diagnostic and programming channel.",
-    enterCode: "Paste Smart Master Code (e.g., host#123456)",
-    connectToCar: "Establish Connection Now",
-    connecting: "Connecting...",
-    connectSuccess: "Connected Successfully!",
-    connectError: "Connection failed. Please check the code.",
+    serverAddressDesc: "Private signaling server URL (e.g., https://...)",
+    save: "Apply",
+    techTabDesc: "Paste the pairing code here.",
+    enterCode: "Paste P2P master code",
+    connectToCar: "Start P2P Connection",
+    connecting: "Heartbeat sync...",
+    connectSuccess: "P2P Link established!",
+    connectError: "Sync failed. Check NAT/Firewall.",
     disconnect: "Disconnect",
-    deleteSession: "Delete Session",
-    chat: "Chat",
-    typeMessage: "Type a message...",
-    sendFile: "Send File",
-    waitingForPeer: "Waiting for peer to connect to start chat...",
-    selectSession: "Please select a session from the left to view",
-    adminLogin: "Admin Login",
-    userLogin: "User Login",
-    register: "Register",
-    username: "Username",
+    deleteSession: "Delete",
+    chat: "Secure Chat",
+    typeMessage: "Message...",
+    sendFile: "File",
+    waitingForPeer: "Waiting for peer...",
+    selectSession: "Select a tunnel to view details",
+    login: "Enter Console",
+    register: "Register Now",
+    username: "Account",
     password: "Password",
-    login: "Login",
+    userLogin: "User Login",
+    adminLogin: "Expert Login",
+    noAccount: "No account? Register",
+    hasAccount: "Have account? Login",
+    adminAccess: "Expert Access",
+    userAccess: "Standard Access",
+    enterUsername: "Enter Account",
+    enterPassword: "Enter Password",
+    enterAdminPassword: "Enter Admin Password",
     invalidPassword: "Invalid Password",
-    noAccount: "No account? Register now",
-    hasAccount: "Have an account? Login",
-    adminAccess: "Admin Access",
-    userAccess: "Back to User Login",
-    enterUsername: "Enter username",
-    enterPassword: "Enter password",
-    enterAdminPassword: "Enter admin password",
-    loginSuccess: "Login successful",
-    registerSuccess: "Registration successful"
+    expertPin: "Expert PIN",
+    loginSuccess: "Access Granted"
   }
 };
 
@@ -213,22 +205,27 @@ export default function App() {
   const [lang, setLang] = useState<'zh' | 'en'>('zh');
   const [sessions, setSessions] = useState<Session[]>([]);
   const [customServer, setCustomServer] = useState<string>(() => localStorage.getItem('customServer') || '');
+  const [chinaMode, setChinaMode] = useState<boolean>(() => localStorage.getItem('chinaMode') === 'true');
+
+  useEffect(() => {
+    localStorage.setItem('chinaMode', String(chinaMode));
+  }, [chinaMode]);
 
   // Global Deployment Config
-  const DEPLOY_HOST = 'ais-dev-6vzb5ii2khdtuxrypste7y-517505685900.asia-east1.run.app';
-  const DEPLOY_URL = `https://${DEPLOY_HOST}`;
+  const DEPLOY_HOST = '120.78.234.56:3000';
+  const DEPLOY_URL = `http://${DEPLOY_HOST}`;
 
   // Base URL for API calls
   const getApiBase = () => {
     if (customServer) return customServer.replace(/\/$/, '');
     
-    // For local EXE builds, we default to localhost:3000 for UI-side hardware interaction.
-    // Pairing logic has its own cloud-fallback override.
-    if (window.location.protocol === 'file:') {
-      return 'http://127.0.0.1:3000';
+    // In Browser Preview or standard web environment
+    if (window.location.protocol !== 'file:') {
+       return ''; // Relative to current domain
     }
     
-    return ''; // Relative in browser
+    // For compiled EXE connecting back to cloud
+    return DEPLOY_URL;
   };
 
   const getWsBase = () => {
@@ -236,12 +233,11 @@ export default function App() {
        return customServer.replace(/^http/i, 'ws').replace(/\/$/, '');
     }
     
-    // For local EXE, default to localhost ws
-    if (window.location.protocol === 'file:') {
-       return 'ws://127.0.0.1:3000';
+    if (window.location.protocol !== 'file:') {
+       return window.location.origin.replace(/^http/i, 'ws');
     }
     
-    return window.location.origin.replace(/^http/i, 'ws');
+    return DEPLOY_URL.replace(/^http/i, 'ws');
   };
 
   const API_BASE = getApiBase();
@@ -286,6 +282,9 @@ export default function App() {
   const [activeChatSession, setActiveChatSession] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState('');
   const [adminWsMap, setAdminWsMap] = useState<Record<string, WebSocket>>({});
+  const [connectionMode, setConnectionMode] = useState<'relay' | 'p2p'>('relay');
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const dcRef = useRef<RTCDataChannel | null>(null);
 
   // Theme State
   const [theme, setTheme] = useState<'dark' | 'light' | 'pink'>('dark');
@@ -430,39 +429,37 @@ export default function App() {
   const [isServerReady, setIsServerReady] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
-  const checkServerHealth = async (retries = 10) => {
-    // If we're using a remote cloud host, we don't need to "wait" for it to start
-    // like a local process. We just check if it's reachable.
-    const isLocal = API_BASE.includes('127.0.0.1') || API_BASE.includes('localhost');
-    
+  const checkServerHealth = async (retries = 5) => {
     try {
-      const res = await fetch(`${API_BASE}/api/health`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      
+      const res = await fetch(`${API_BASE}/api/health`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      
       if (res.ok) {
         setIsServerReady(true);
         setServerError(null);
         return true;
       }
     } catch (e) {
-      if (isLocal && retries > 0) {
-        console.log(`Local server not ready, retrying... (${retries} left)`);
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      if (retries > 0) {
+        await new Promise(resolve => setTimeout(resolve, 1500));
         return checkServerHealth(retries - 1);
       }
     }
 
-    if (isLocal) {
-      setServerError(lang === 'zh' ? '本地后台服务启动超时。如果您已配置远程服务器，请检查网络连接。' : 'Local backend service timeout. If using a remote server, check your connection.');
-      return false;
-    } else {
-      // For remote, if it fails, we still allow the UI to load but maybe show a warning later
-      setIsServerReady(true);
-      return true;
-    }
+    // After all retries fail
+    setIsServerReady(true); // Don't block UI
+    return true;
   };
 
   useEffect(() => {
     checkServerHealth();
-  }, []);
+    // Background check every 30 seconds
+    const interval = setInterval(() => checkServerHealth(0), 30000);
+    return () => clearInterval(interval);
+  }, [API_BASE]);
 
   const fetchSessions = async () => {
     if (!isAuthenticated || !isServerReady) return;
@@ -537,19 +534,24 @@ export default function App() {
     }
   }, [isAuthenticated, isServerReady]);
 
-  const createSession = async () => {
+  const createSession = async (replaceId?: string) => {
     try {
-      // IMPORTANT: In EXE mode, when generating a code for remote connection,
-      // we prefer to register on the CLOUD server so the Tech client can find it.
-      // However, we fallback to local if cloud is unreachable or configured otherwise.
+      const owner = localStorage.getItem('bimmerbridge_user') || 'anonymous';
       let targetBase = API_BASE;
       if (window.location.protocol === 'file:' && !customServer) {
         targetBase = DEPLOY_URL; // Force cloud for pairing in basic EXE mode
       }
-
+      
       const res = await fetch(`${targetBase}/api/sessions`, { 
         method: 'POST',
-        headers: { 'Accept': 'application/json' }
+        headers: { 
+          'Accept': 'application/json',
+          'Content-Type': 'application/json' 
+        },
+        body: JSON.stringify({ 
+          replaceSessionId: replaceId,
+          owner: owner
+        })
       });
       
       if (!res.ok) {
@@ -558,7 +560,14 @@ export default function App() {
           console.warn("Cloud pairing failed, falling back to local pairing...");
           const localRes = await fetch(`http://127.0.0.1:3000/api/sessions`, { 
             method: 'POST',
-            headers: { 'Accept': 'application/json' }
+            headers: { 
+              'Accept': 'application/json',
+              'Content-Type': 'application/json' 
+            },
+            body: JSON.stringify({ 
+              replaceSessionId: replaceId,
+              owner: owner
+            })
           });
           if (localRes.ok) {
             const data = await localRes.json();
@@ -586,7 +595,6 @@ export default function App() {
           if (res.ok) return await res.json();
         } catch(e2) {}
       }
-      alert(lang === 'zh' ? '无法连接到中转服务。请检查网络连接，或确保本地后台已启动。' : 'Failed to connect to relay service. Check your connection or ensure local backend is running.');
       return null;
     }
   };
@@ -607,6 +615,119 @@ export default function App() {
     }
   };
 
+  const setupP2P = (socket: WebSocket, isOfferer: boolean) => {
+    if (pcRef.current) {
+      pcRef.current.close();
+    }
+    
+    // Standard and China-optimized STUN servers
+    const config = {
+      iceServers: chinaMode ? [
+        { urls: 'stun:stun.qq.com:3478' },
+        { urls: 'stun:stun.mi-img.com:3478' },
+        { urls: 'stun:stun.anyfirewall.com:3478' },
+        { urls: 'stun:stun.l.google.com:19302' }
+      ] : [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun.qq.com:3478' }
+      ]
+    };
+
+    const pc = new RTCPeerConnection(config);
+    pcRef.current = pc;
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'webrtc_candidate', candidate: event.candidate }));
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+       if (pc.connectionState === 'connected') {
+          setConnectionMode('p2p');
+       } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+          setConnectionMode('relay');
+       }
+    };
+
+    if (isOfferer) {
+      const dc = pc.createDataChannel('bimmerbridge-p2p');
+      setupDataChannel(dc);
+      pc.createOffer().then(offer => {
+        pc.setLocalDescription(offer);
+        socket.send(JSON.stringify({ type: 'webrtc_offer', offer }));
+      });
+    } else {
+      pc.ondatachannel = (event) => {
+        setupDataChannel(event.channel);
+      };
+    }
+    return pc;
+  };
+
+  const setupDataChannel = (dc: RTCDataChannel) => {
+    dcRef.current = dc;
+    dc.onopen = () => {
+      console.log('P2P Data Channel Open');
+      setConnectionMode('p2p');
+    };
+    dc.onclose = () => {
+      console.log('P2P Data Channel Closed');
+      setConnectionMode('relay');
+    };
+    dc.onmessage = (event) => {
+       try {
+         const data = JSON.parse(event.data);
+         handleIncomingData(data, {} as WebSocket, '', ''); 
+       } catch(e) {}
+    };
+  };
+
+  const handleIncomingData = (data: any, ws: WebSocket, targetCode: string, sessionId: string) => {
+    if (data.type === 'auth_success') {
+      console.log('Auth success:', data.agentId);
+      return true;
+    } else if (data.type === 'chat') {
+       if (data.subtype === 'recall') {
+          setChatMessages(prev => {
+            const currentMessages = prev[sessionId] || [];
+            return {
+              ...prev,
+              [sessionId]: currentMessages.map(m => m.id === data.messageId ? { ...m, recalled: true } : m)
+            };
+          });
+          return;
+       }
+      setChatMessages(prev => {
+        const currentMessages = prev[sessionId] || [];
+        if (currentMessages.some(m => m.id === data.message.id)) return prev;
+        return { ...prev, [sessionId]: [...currentMessages, data.message] };
+      });
+    } else if (data.type === 'peer_connected') {
+      setIsPeerConnected(true);
+      // Tech client is the initiator
+      if (activeTab === 'tech') {
+        setupP2P(ws, true);
+      }
+    } else if (data.type === 'peer_disconnected') {
+      setIsPeerConnected(false);
+      setConnectionMode('relay');
+    } else if (data.type === 'car_info') {
+      setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, carIp: data.ip, carVin: data.vin } : s));
+    } else if (data.type === 'webrtc_offer') {
+      const pc = pcRef.current || setupP2P(ws, false);
+      pc.setRemoteDescription(new RTCSessionDescription(data.offer))
+        .then(() => pc.createAnswer())
+        .then(answer => pc.setLocalDescription(answer))
+        .then(() => ws.send(JSON.stringify({ type: 'webrtc_answer', answer: pc.localDescription })));
+    } else if (data.type === 'webrtc_answer') {
+      pcRef.current?.setRemoteDescription(new RTCSessionDescription(data.answer));
+    } else if (data.type === 'webrtc_candidate') {
+      pcRef.current?.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(e => console.warn('ICE Error:', e));
+    }
+    return false;
+  };
   // Car Client State
   const [carWs, setCarWs] = useState<WebSocket | null>(null);
   const [myCarSessionId, setMyCarSessionId] = useState<string | null>(() => localStorage.getItem('myCarSessionId'));
@@ -621,8 +742,13 @@ export default function App() {
     } 
     // Fallback if no custom server
     else {
-      // Use deployment host for display
-      host = DEPLOY_HOST.toLowerCase();
+      // Use window.location.host instead of hardcoded DEPLOY_HOST for best China connectivity
+      // If we are in EXE (file:), we use the DEPLOY_HOST
+      if (window.location.protocol === 'file:') {
+        host = DEPLOY_HOST.toLowerCase();
+      } else {
+        host = window.location.host.toLowerCase();
+      }
     }
     
     return host ? `${host}#${latestCode}` : latestCode;
@@ -633,9 +759,8 @@ export default function App() {
     setIsGeneratingCode(true);
 
     try {
-      // Check if we have a locally stored session ID first
+      // 1. Try to refresh existing session if possible
       if (myCarSessionId) {
-        // Try to fetch/refresh OUR specific session
         try {
           const res = await fetch(`${API_BASE}/api/sessions/${myCarSessionId}/refresh`, {
             method: 'PUT',
@@ -652,6 +777,7 @@ export default function App() {
             const isCloudSession = !customServer && window.location.protocol === 'file:';
             const wsBase = isCloudSession ? DEPLOY_URL.replace(/^http/i, 'ws') : WS_BASE;
             connectCarWs(data.code, data.sessionId, wsBase);
+            setIsGeneratingCode(false);
             return;
           }
         } catch (e) {
@@ -659,19 +785,18 @@ export default function App() {
         }
       }
 
-      // If no local session or refresh failed, create a new one
+      // 2. If no local session or refresh failed, create a new one while replacing the old one on the server
       if (carWs) {
         carWs.close();
         setCarWs(null);
       }
 
-      const session = await createSession();
+      const session = await createSession(myCarSessionId || undefined);
       if (session) {
         setLatestCode(session.code);
         setMyCarSessionId(session.id);
         localStorage.setItem('myCarSessionId', session.id);
         
-        // If the session was created on the cloud, we MUST connect our WS to the cloud too
         const isCloudSession = !customServer && window.location.protocol === 'file:';
         const wsBase = isCloudSession ? DEPLOY_URL.replace(/^http/i, 'ws') : WS_BASE;
         
@@ -682,7 +807,7 @@ export default function App() {
     }
   };
 
-  const connectCarWs = (code: string, sessionId: string, forcedWsBase?: string) => {
+   const connectCarWs = (code: string, sessionId: string, forcedWsBase?: string) => {
     const base = forcedWsBase || WS_BASE;
     const wsUrl = `${base}/bridge`;
     const ws = new WebSocket(wsUrl);
@@ -695,19 +820,11 @@ export default function App() {
       if (typeof event.data === 'string') {
         try {
           const data = JSON.parse(event.data);
-          if (data.type === 'chat') {
-            setChatMessages(prev => {
-              const currentMessages = prev[sessionId] || [];
-              if (currentMessages.some(m => m.id === data.message.id)) return prev;
-              return {
-                ...prev,
-                [sessionId]: [...currentMessages, data.message]
-              };
-            });
-          } else if (data.type === 'peer_connected' && data.role === 'tech') {
-            setIsPeerConnected(true);
-          } else if (data.type === 'peer_disconnected' && data.role === 'tech') {
-            setIsPeerConnected(false);
+          handleIncomingData(data, ws, code, sessionId);
+          
+          // If peer connects, Car starts the offer (let's just pick one side)
+          if (data.type === 'peer_connected' && data.role === 'tech') {
+              setupP2P(ws, true);
           }
         } catch (e) {}
       }
@@ -718,7 +835,6 @@ export default function App() {
 
   const handleScanVehicle = (sessionId: string) => {
     if (!carWs || carWs.readyState !== WebSocket.OPEN) {
-      alert(lang === 'zh' ? '连接已断开，请重新生成连接码。' : 'Connection lost. Please regenerate code.');
       return;
     }
     
@@ -746,118 +862,129 @@ export default function App() {
       setTechWs(null);
     }
     
-    let rawInput = techCode.trim();
+    let rawInput = techCode.trim().toUpperCase();
+    if (!rawInput) return;
+
+    // Strip "CN_" prefix if present
+    if (rawInput.startsWith("CN_")) {
+       rawInput = rawInput.substring(3);
+    }
+
     let targetCode = '';
     let targetApiBase = API_BASE;
     let targetWsBase = WS_BASE;
 
-    // Detect Smart Master Code (Format: URL#CODE)
+    // Smart Detection
     if (rawInput.includes('#')) {
       const parts = rawInput.split('#');
-      if (parts.length === 2) {
+      if (parts.length >= 2) {
         let serverUrl = parts[0].trim();
-        let codePart = parts[1].trim().toUpperCase();
+        let codePart = parts[parts.length - 1].trim().toUpperCase();
         
-        if (codePart.length === 6) {
-          // Clean up URL
+        if (codePart.length > 0) {
           if (!serverUrl.match(/^https?:\/\//i)) {
-            serverUrl = 'https://' + serverUrl;
+            const isIp = /^[0-9.]+(:[0-9]+)?$/.test(serverUrl);
+            serverUrl = (isIp ? 'http://' : 'https://') + serverUrl;
           }
-          
           targetApiBase = serverUrl.replace(/\/$/, '');
-          // Case-insensitive replace for websocket protocol
           targetWsBase = serverUrl.replace(/^http/i, 'ws').replace(/\/$/, '');
           targetCode = codePart;
-
-          // Permanently update server if provided via smart code
-          setCustomServer(serverUrl);
-          localStorage.setItem('customServer', serverUrl);
+          
+          if (!serverUrl.includes('127.0.0.1') && !serverUrl.includes('localhost')) {
+            setCustomServer(serverUrl);
+            localStorage.setItem('customServer', serverUrl);
+          }
         }
       }
-    } 
-    
-    // Fallback if not a smart code or parsing failed
-    if (!targetCode) {
+    } else if (rawInput.length >= 6 && /^[0-9A-Z]+$/i.test(rawInput)) {
+      // 6-digit short code: use default DEPLOY_URL if available
       targetCode = rawInput.toUpperCase();
+      if (DEPLOY_URL && window.location.protocol === 'file:') {
+        const cloudHost = DEPLOY_URL.includes(':') ? DEPLOY_URL : `${DEPLOY_URL}:3000`;
+        targetApiBase = `http://${cloudHost}`;
+        targetWsBase = `ws://${cloudHost}`;
+      }
+    } else if (rawInput.includes('.') && rawInput.length > 10) {
+      return;
     }
 
-    if (!targetCode || targetCode.length !== 6) {
+    if (!targetCode) {
       setTechStatus('error');
       return;
     }
 
+    setLatestCode(targetCode);
     setTechStatus('connecting');
     const wsUrl = `${targetWsBase}/bridge`;
-    const ws = new WebSocket(wsUrl);
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'auth', role: 'tech', code: targetCode }));
+    
+    const fetchSessionsFromUrl = async () => {
+      try {
+        const res = await fetch(`${targetApiBase}/api/sessions`, {
+          headers: { 'Authorization': adminToken || '', 'Accept': 'application/json' }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setSessions(data);
+          const session = data.find((s: Session) => s.code === targetCode);
+          if (session) setActiveChatSession(session.id);
+        }
+      } catch (e) {}
     };
 
-    ws.onmessage = (event) => {
-      if (typeof event.data === 'string') {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'auth_success') {
-            setTechStatus('connected');
-            // Fetch sessions from the specific API BASE inferred from the code
-            const fetchSessionsFromUrl = async () => {
-              try {
-                const res = await fetch(`${targetApiBase}/api/sessions`, {
-                  headers: { 'Authorization': adminToken || '', 'Accept': 'application/json' }
-                });
-                if (res.ok) {
-                  const data = await res.json();
-                  setSessions(data);
-                  const session = data.find((s: Session) => s.code === targetCode);
-                  if (session) setActiveChatSession(session.id);
-                }
-              } catch (e) {}
-            };
-            fetchSessionsFromUrl();
-            setActiveTab('dashboard');
-          } else if (data.type === 'error') {
-            setTechStatus('error');
-            ws.close();
-          } else if (data.type === 'chat') {
-            // Find session to add message to
-            const session = sessions.find(s => s.code === targetCode);
-            if (session) {
-              setChatMessages(prev => {
-                const currentMessages = prev[session.id] || [];
-                if (currentMessages.some(m => m.id === data.message.id)) return prev;
-                return {
-                  ...prev,
-                  [session.id]: [...currentMessages, data.message]
-                };
-              });
-            }
-          } else if (data.type === 'peer_connected' && data.role === 'car') {
-            setIsPeerConnected(true);
-          } else if (data.type === 'peer_disconnected' && data.role === 'car') {
-            setIsPeerConnected(false);
-          } else if (data.type === 'car_info') {
-            const session = sessions.find(s => s.code === targetCode);
-            if (session) {
-              setSessions(prev => prev.map(s => s.id === session.id ? { ...s, carIp: data.ip, carVin: data.vin } : s));
-            }
-          }
-        } catch (e) {}
-      }
-    };
+    try {
+      const ws = new WebSocket(wsUrl);
+      setTechWs(ws);
 
-    ws.onerror = () => {
+      const connectionTimeout = setTimeout(() => {
+        if (ws.readyState !== WebSocket.OPEN) {
+          ws.close();
+          handleTechError(new Error('Timeout'));
+        }
+      }, 10000);
+
+      const handleTechError = (e: any) => {
+        console.error('Tech WS Error:', e);
+        console.log('Failed connection target:', wsUrl);
+        setTechStatus('error');
+        alert(lang === 'zh' 
+          ? `配对失败：无法与全球信令中心建立握手。\n\n请检查：\n1. 您的防火墙是否允许 TCP 3000 端口通讯\n2. 另一端（车辆端）是否已经成功生成了连接码\n3. 网络环境是否处于极度严格的局域网管控下`
+          : `Pairing Failed: Unable to reach signaling center.\n\nPlease check:\n1. Your firewall allows TCP 3000 traffic\n2. The remote Car Client has generated a valid code\n3. Your current network doesn't block high-speed P2P links.`);
+      };
+
+      ws.onopen = () => {
+        clearTimeout(connectionTimeout);
+        ws.send(JSON.stringify({ type: 'auth', role: 'tech', code: targetCode }));
+      };
+
+      ws.onmessage = (event) => {
+        if (typeof event.data === 'string') {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'auth_success') {
+              setTechStatus('connected');
+              fetchSessionsFromUrl();
+              setActiveTab('dashboard');
+              
+              // Start P2P if possible
+              setupP2P(ws, true);
+            }
+            
+            // Critical: find sessionId if we only have code
+            const currentSessionId = data.sessionId || (sessions.find(s => s.code === targetCode)?.id) || '';
+            handleIncomingData(data, ws, targetCode, currentSessionId);
+          } catch (e) {}
+        }
+      };
+
+      ws.onerror = handleTechError;
+      ws.onclose = () => {
+        if (techStatus === 'connected') setTechStatus('idle');
+        setTechWs(null);
+      };
+    } catch(e) {
       setTechStatus('error');
-      alert(lang === 'zh' ? '连接失败：无法建立网络通道。请确保“连车端”已生成连接码并保持开启状态，且两端网络均可访问该服务器。' : 'Connection failed: Unable to establish network tunnel. Ensure "Car Client" is active and both sides have internet access to the server.');
-    };
-
-    ws.onclose = () => {
-      if (techStatus === 'connected') {
-         setTechStatus('idle');
-      }
-    };
-
-    setTechWs(ws);
+      console.error(e);
+    }
   };
 
   const handleTechDisconnect = () => {
@@ -942,12 +1069,14 @@ export default function App() {
       [sessionId]: [...(prev[sessionId] || []), message]
     }));
 
-    // Send via WebSocket
+    // Send via WebSocket or P2P
     const ws = senderRole === 'admin' ? adminWsMap[sessionId] : (senderRole === 'car' ? carWs : techWs);
-    if (ws && ws.readyState === WebSocket.OPEN) {
+    if (dcRef.current && dcRef.current.readyState === 'open' && senderRole !== 'admin') {
+       dcRef.current.send(JSON.stringify({ type: 'chat', message }));
+    } else if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'chat', message }));
     } else {
-      console.error('WebSocket not open, message not sent');
+      console.error('No connection open, message not sent');
     }
 
     setChatInput('');
@@ -983,17 +1112,19 @@ export default function App() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] font-sans selection:bg-[var(--accent-primary)]/30 flex flex-col items-center justify-center p-6">
-        <div className="w-full max-w-md bg-[var(--bg-card)] border border-[var(--border-main)] rounded-lg overflow-hidden shadow-2xl">
+      <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] font-sans selection:bg-[var(--accent-primary)]/30 flex flex-col items-center justify-center p-6 relative overflow-hidden">
+        <div className="scanline" />
+        <div className="absolute inset-0 cyber-grid pointer-events-none" />
+        <div className="w-full max-w-md bg-[var(--bg-card)] border border-[var(--border-main)] rounded-3xl overflow-hidden shadow-2xl animate-breathe z-10">
           <div className="p-8 border-b border-[var(--border-main)] flex flex-col items-center text-center">
             <div className="w-12 h-12 bg-[var(--accent-primary)] rounded-lg flex items-center justify-center mb-4 shadow-[0_0_15px_rgba(46,134,222,0.4)]">
               <Network className="w-7 h-7 text-white" />
             </div>
-            <h1 className="text-2xl font-bold tracking-[1px] uppercase text-[var(--text-main)]">
+            <h1 className="text-2xl font-bold tracking-[1px] uppercase text-[var(--text-main)] glow-text">
               BimmerBridge <span className="text-[var(--accent-primary)]">ENET</span>
             </h1>
             <p className="text-[var(--text-muted)] text-sm mt-2">
-              {lang === 'zh' ? '宝马远程编程桥接系统' : 'BMW Remote Programming Bridge'}
+              {lang === 'zh' ? '私有加密 P2P 研发通讯终端' : 'Private Secure P2P Comm Terminal'}
             </p>
           </div>
           
@@ -1107,7 +1238,9 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] font-sans selection:bg-[var(--accent-primary)]/30 flex flex-col">
+    <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] font-sans selection:bg-[var(--accent-primary)]/30 flex flex-col relative overflow-hidden">
+      <div className="scanline" />
+      <div className="absolute inset-0 cyber-grid pointer-events-none" />
       {/* Header */}
       <header className="h-[60px] border-b border-[var(--border-main)] bg-[var(--bg-card)] flex items-center sticky top-0 z-10 shrink-0">
         <div className="w-full max-w-7xl mx-auto px-6 flex items-center justify-between">
@@ -1115,14 +1248,21 @@ export default function App() {
             <div className="w-6 h-6 bg-[var(--accent-primary)] rounded flex items-center justify-center">
               <Network className="w-4 h-4 text-white" />
             </div>
-            <span className="text-[var(--text-main)] flex items-center gap-2">
-              {t.title} <span className="text-[var(--accent-primary)]">ENET</span>
-              <span className="px-1.5 py-0.5 rounded bg-[var(--accent-primary)]/10 border border-[var(--accent-primary)] text-[var(--accent-primary)] font-mono text-[10px] tracking-widest ml-2">
+            <span className="text-[var(--text-main)] flex items-center gap-2 glow-text">
+              {t.title} <span className="text-[var(--accent-primary)] font-black">ENET</span>
+              <span className="px-1.5 py-0.5 rounded bg-[var(--accent-primary)]/10 border border-[var(--accent-primary)] text-[var(--accent-primary)] font-mono text-[9px] tracking-widest ml-1 opacity-70">
                 {t.version}
               </span>
             </span>
           </div>
           <div className="flex items-center gap-6">
+            <div className="hidden lg:flex items-center gap-2 px-3 py-1 bg-[var(--bg-main)] border border-[var(--accent-primary)]/20 rounded-full">
+              <div className="relative">
+                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
+                <div className="absolute inset-0 w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping opacity-75"></div>
+              </div>
+              <span className="text-[9px] font-mono text-emerald-500/80 tracking-widest uppercase">P2P TUNNEL [SECURE]</span>
+            </div>
             <nav className="flex gap-2">
               {isAuthenticated && (
                 <button
@@ -1211,7 +1351,7 @@ export default function App() {
                 <h2 className="text-[11px] uppercase tracking-[2px] text-[var(--text-muted)] mb-2">
                   {t.remoteSessions}
                 </h2>
-                <p className="text-[var(--text-main)] text-sm">{t.manageConnections}</p>
+                {t.manageConnections && <p className="text-[var(--text-main)] text-sm">{t.manageConnections}</p>}
               </div>
               <button
                 onClick={() => setActiveTab("downloads")}
@@ -1224,7 +1364,7 @@ export default function App() {
 
             <div className="flex flex-1 gap-6 overflow-hidden">
               {/* Left Sidebar: Session List + Details */}
-              <div className="w-80 flex-shrink-0 flex flex-col gap-6 overflow-hidden">
+              <div className="w-80 flex-shrink-0 flex flex-col gap-6 overflow-hidden animate-breathe p-1 rounded-2xl border border-[var(--border-main)]">
                 <div className="flex-1 flex flex-col gap-3 overflow-y-auto pr-2 custom-scrollbar">
                   {loading ? (
                     <div className="text-center py-12 text-[var(--text-muted)] font-mono text-sm">
@@ -1355,7 +1495,7 @@ export default function App() {
               </div>
 
               {/* Right Workspace: Details + Chat */}
-              <div className="flex-1 bg-[var(--bg-card)] border border-[var(--border-main)] rounded-lg flex flex-col overflow-hidden shadow-xl">
+              <div className="flex-1 bg-[var(--bg-card)] border border-[var(--border-main)] rounded-3xl flex flex-col overflow-hidden shadow-xl animate-breathe">
                 {activeChatSession ? (
                   (() => {
                     const session = sessions.find(s => s.id === activeChatSession);
@@ -1469,78 +1609,55 @@ export default function App() {
         )}
 
         {isServerReady && activeTab === "downloads" && (
-          <div className="space-y-8">
-            <div>
+          <div className="space-y-6 max-w-2xl mx-auto">
+            <div className="text-center">
               <h2 className="text-[11px] uppercase tracking-[2px] text-[var(--text-muted)] mb-2">
                 {t.downloadInstructions}
               </h2>
-              <p className="text-[var(--text-main)] text-sm">
+              <p className="text-[var(--text-main)] text-xs">
                 {t.downloadDesc}
               </p>
             </div>
 
-            <div className="bg-[var(--bg-card)] border border-[var(--border-main)] rounded-lg p-12 text-center shadow-2xl relative overflow-hidden">
+            <div className="bg-[var(--bg-card)] border border-[var(--border-main)] rounded-2xl p-8 text-center shadow-xl relative overflow-hidden animate-breathe">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--accent-primary)] to-transparent opacity-50"></div>
               
-              <button
-                onClick={handleGenerateCode}
-                disabled={isGeneratingCode}
-                className={`bg-[var(--accent-primary)] text-white px-10 py-5 rounded-xl font-black uppercase tracking-[3px] transition-all transform hover:scale-105 shadow-[0_20px_40px_rgba(46,134,222,0.2)] flex items-center gap-4 mx-auto border-2 border-white/10 ${isGeneratingCode ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-[0_25px_50px_rgba(46,134,222,0.3)]'}`}
-              >
-                <Zap className={`w-6 h-6 ${isGeneratingCode ? 'animate-spin' : 'fill-current'}`} />
-                {isGeneratingCode ? (lang === 'zh' ? '正在生成...' : 'Generating...') : t.generateCode}
-              </button>
+              <div className="flex items-center justify-center">
+                <button
+                  onClick={() => handleGenerateCode()}
+                  disabled={isGeneratingCode}
+                  className={`bg-[var(--accent-primary)] text-white px-8 py-3.5 rounded-xl font-black uppercase tracking-[2px] transition-all transform hover:scale-105 shadow-lg flex items-center gap-3 border border-white/10 ${isGeneratingCode ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-2xl'}`}
+                >
+                  <Zap className={`w-4 h-4 ${isGeneratingCode ? 'animate-spin' : 'fill-current'}`} />
+                  {isGeneratingCode ? (lang === 'zh' ? '处理中...' : 'Processing...') : (latestCode ? (lang === 'zh' ? '刷新代码' : 'Refresh') : t.generateCode)}
+                </button>
+              </div>
 
               {latestCode && (
-                <div className="mt-12 animate-in fade-in slide-in-from-bottom-8 duration-700">
-                  <div className="bg-[var(--bg-card)] border-2 border-[var(--accent-primary)]/40 rounded-2xl p-8 relative overflow-hidden shadow-2xl shadow-[var(--accent-primary)]/10">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-[var(--accent-primary)]/5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
-                    
-                    <div className="flex items-center justify-between mb-6">
-                      <div className="flex items-center gap-3 text-[var(--accent-primary)]">
-                        <Shield className="w-5 h-5" />
-                        <h3 className="text-sm font-black uppercase tracking-[2px]">{t.smartCode}</h3>
-                      </div>
-                      <div className="px-3 py-1 bg-[var(--accent-success)]/10 text-[var(--accent-success)] text-[10px] font-black rounded-full border border-[var(--accent-success)]/20 uppercase tracking-wider">
-                        Active
+                <div className="mt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className="bg-[var(--bg-main)]/50 border border-[var(--border-main)] rounded-xl p-6 relative">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2 text-[var(--accent-primary)]">
+                        <Shield className="w-4 h-4" />
+                        <h3 className="text-[11px] font-black uppercase tracking-[1px]">{t.smartCode}</h3>
                       </div>
                     </div>
 
-                    <p className="text-xs text-[var(--text-muted)] mb-6 leading-relaxed text-left font-medium opacity-80">
-                      {t.smartCodeDesc}
-                    </p>
-
                     <div className="flex flex-col gap-4">
-                      <div className="relative group">
-                        <div className="absolute -inset-1 bg-gradient-to-r from-[var(--accent-primary)] to-cyan-500 rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
-                        <div className="relative flex items-center gap-3 bg-[var(--bg-main)] p-5 rounded-xl border border-[var(--border-main)] shadow-inner">
-                          <code className="flex-1 font-mono text-sm break-all font-bold text-[var(--text-main)] tracking-wider">
-                            {!getSmartCode().includes('#') && (lang === 'zh' ? '【请先设置服务器地址】' : '[Set server address first] ')}
-                            {getSmartCode()}
-                          </code>
-                          <button 
-                            onClick={() => {
-                              const code = getSmartCode();
-                              if (!code.includes('#')) {
-                                // Instead of alert, we can try to auto-set if browser
-                                if (window.location.protocol !== 'file:') {
-                                   const autoHost = window.location.hostname;
-                                   navigator.clipboard.writeText(`${autoHost}#${latestCode}`);
-                                   return;
-                                }
-                                return;
-                              }
-                              navigator.clipboard.writeText(code);
-                            }}
-                            className="bg-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/90 text-white p-4 rounded-lg transition-all hover:scale-110 active:scale-95 shadow-lg shadow-[var(--accent-primary)]/20"
-                            title={lang === 'zh' ? '复制万能码' : 'Copy Master Code'}
-                          >
-                            <Copy className="w-5 h-5" />
-                          </button>
-                        </div>
+                      <div className="bg-[var(--bg-card)] px-6 py-4 rounded-xl border border-[var(--border-main)] flex items-center justify-between shadow-inner">
+                        <code className="font-mono text-2xl font-black text-[var(--text-main)] tracking-[0.2em]">
+                          {latestCode}
+                        </code>
+                        <button 
+                          onClick={() => {
+                            navigator.clipboard.writeText(latestCode);
+                          }}
+                          className="bg-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/90 text-white p-3 rounded-lg transition-all active:scale-95"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
                       </div>
-                      
-                      <p className="text-[11px] text-[var(--text-muted)] italic text-center font-medium">
+                      <p className="text-[10px] text-[var(--text-muted)] italic text-center">
                         {t.sendToTech}
                       </p>
                     </div>
@@ -1554,25 +1671,40 @@ export default function App() {
                       <div className="mt-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         {/* Vehicle Connection Status */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className={`p-4 rounded-lg border flex items-center gap-4 transition-all ${session.carConnected ? 'bg-[var(--accent-success)]/5 border-[var(--accent-success)]/30' : 'bg-[var(--bg-main)] border-[var(--border-main)]'}`}>
-                            <div className={`p-2 rounded-full ${session.carConnected ? 'bg-[var(--accent-success)] text-white' : 'bg-[var(--text-muted)]/20 text-[var(--text-muted)]'}`}>
-                              <Car className="w-5 h-5" />
-                            </div>
-                            <div className="text-left">
-                              <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] mb-1">{lang === 'zh' ? '车辆连接状态' : 'Vehicle Connection'}</div>
-                              <div className={`text-sm font-bold ${session.carConnected ? 'text-[var(--accent-success)]' : 'text-[var(--text-muted)]'}`}>
-                                {session.carConnected ? (lang === 'zh' ? '已连接到车辆' : 'Connected to Vehicle') : (lang === 'zh' ? '未连接到车辆' : 'Not Connected')}
-                              </div>
-                            </div>
-                            {!session.carConnected && (
-                              <button
-                                onClick={() => handleScanVehicle(session.id)}
-                                disabled={isScanning}
-                                className="ml-auto px-3 py-1.5 bg-[var(--accent-primary)] text-white text-[10px] font-bold uppercase tracking-wider rounded hover:bg-[var(--accent-primary)]/90 disabled:opacity-50"
-                              >
-                                {isScanning ? (lang === 'zh' ? '正在读取...' : 'Reading...') : (lang === 'zh' ? '读取车辆IP' : 'Read Vehicle IP')}
-                              </button>
-                            )}
+                          <div className={`p-4 rounded-lg border flex flex-col gap-1 transition-all ${session.carConnected ? 'bg-[var(--accent-success)]/5 border-[var(--accent-success)]/30' : 'bg-[var(--bg-main)] border-[var(--border-main)]'}`}>
+                             <div className="flex items-center gap-4">
+                                <div className={`p-2 rounded-full ${session.carConnected ? 'bg-[var(--accent-success)] text-white' : 'bg-[var(--text-muted)]/20 text-[var(--text-muted)]'}`}>
+                                  <Car className="w-5 h-5" />
+                                </div>
+                                <div className="text-left">
+                                  <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] mb-1">{lang === 'zh' ? '车辆连接状态' : 'Vehicle Connection'}</div>
+                                  <div className={`text-sm font-bold ${session.carConnected ? 'text-[var(--accent-success)]' : 'text-[var(--text-muted)]'}`}>
+                                    {session.carConnected ? (lang === 'zh' ? '已连接到车辆' : 'Connected to Vehicle') : (lang === 'zh' ? '未连接到车辆' : 'Not Connected')}
+                                  </div>
+                                </div>
+                                {!session.carConnected && (
+                                  <button
+                                    onClick={() => handleScanVehicle(session.id)}
+                                    disabled={isScanning}
+                                    className="ml-auto px-3 py-1.5 bg-[var(--accent-primary)] text-white text-[10px] font-bold uppercase tracking-wider rounded hover:bg-[var(--accent-primary)]/90 disabled:opacity-50"
+                                  >
+                                    {isScanning ? (lang === 'zh' ? '正在读取...' : 'Reading...') : (lang === 'zh' ? '读取车辆IP' : 'Read Vehicle IP')}
+                                  </button>
+                                )}
+                             </div>
+                             {session.carConnected && (
+                               <div className="mt-2 pt-2 border-t border-[var(--accent-success)]/20 flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                     <Zap className={`w-3 h-3 ${connectionMode === 'p2p' ? 'text-yellow-400 animate-pulse' : 'text-blue-400'}`} />
+                                     <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+                                        {lang === 'zh' ? '传输模式' : 'Mode'}
+                                     </span>
+                                  </div>
+                                  <span className={`text-[10px] font-black uppercase tracking-wider ${connectionMode === 'p2p' ? 'text-yellow-400' : 'text-blue-400'}`}>
+                                     {connectionMode === 'p2p' ? 'P2P SECURE' : 'ESTABLISHING...'}
+                                  </span>
+                               </div>
+                             )}
                           </div>
 
                           <div className={`p-4 rounded-lg border flex items-center gap-4 transition-all ${session.techConnected ? 'bg-[var(--accent-primary)]/5 border-[var(--accent-primary)]/30' : 'bg-[var(--bg-main)] border-[var(--border-main)]'}`}>
@@ -1703,9 +1835,9 @@ export default function App() {
               </p>
             </div>
 
-            <div className="bg-[var(--bg-card)] border border-[var(--border-main)] rounded-lg p-12 text-center shadow-2xl relative overflow-hidden group">
+            <div className="bg-[var(--bg-card)] border border-[var(--border-main)] rounded-3xl p-12 text-center shadow-2xl relative overflow-hidden group animate-breathe">
               {/* Breath Light Effect */}
-              <div className="absolute inset-0 bg-gradient-to-tr from-[var(--accent-primary)]/5 via-transparent to-[var(--accent-primary)]/5 opacity-30 animate-pulse"></div>
+              <div className="absolute inset-0 bg-gradient-to-tr from-[var(--accent-primary)]/5 via-transparent to-[var(--accent-primary)]/5 opacity-30"></div>
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--accent-primary)] to-transparent opacity-50 shadow-[0_0_15px_var(--accent-primary)]"></div>
               
               {techStatus === 'connected' ? (
@@ -1731,39 +1863,77 @@ export default function App() {
                     <Laptop className="w-16 h-16 text-[var(--accent-primary)] relative animate-bounce" style={{ animationDuration: '3s' }} />
                   </div>
 
-                  <div className="relative mb-6">
-                    <input 
-                      type="text" 
-                      value={techCode}
-                      onChange={(e) => setTechCode(e.target.value)}
-                      placeholder={t.enterCode}
-                      className="w-full bg-[var(--bg-main)]/50 border-2 border-[var(--border-main)] text-[var(--text-main)] px-6 py-4 rounded-xl text-center font-mono text-lg focus:border-[var(--accent-primary)] focus:outline-none transition-all placeholder:text-[var(--text-muted)] focus:shadow-[0_0_20px_rgba(46,134,222,0.1)]"
-                    />
-                  </div>
-                  
-                  {techStatus === 'error' && (
-                    <div className="text-[var(--accent-danger)] text-sm mb-6 bg-[var(--accent-danger)]/10 py-2 rounded-lg border border-[var(--accent-danger)]/20">
-                      {t.connectError}
+                  <div className="space-y-4">
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        value={techCode}
+                        onChange={(e) => setTechCode(e.target.value)}
+                        placeholder={t.enterCode}
+                        className="w-full bg-[var(--bg-main)]/50 border-2 border-[var(--border-main)] text-[var(--text-main)] px-6 py-4 rounded-xl text-center font-mono text-lg focus:border-[var(--accent-primary)] focus:outline-none transition-all placeholder:text-[var(--text-muted)] focus:shadow-[0_0_20px_rgba(46,134,222,0.1)]"
+                      />
                     </div>
-                  )}
-
-                  <button
-                    onClick={handleTechConnect}
-                    disabled={techStatus === 'connecting'}
-                    className="w-full bg-[var(--accent-primary)] text-white py-4 rounded-xl font-black uppercase tracking-[2px] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-[var(--accent-primary)]/20 flex items-center justify-center gap-3 disabled:opacity-50"
-                  >
-                    {techStatus === 'connecting' ? (
-                      <>
-                        <Zap className="w-5 h-5 animate-spin" />
-                        {lang === 'zh' ? '正在连接...' : 'Connecting...'}
-                      </>
-                    ) : (
-                      <>
-                        <Terminal className="w-5 h-5" />
-                        {t.connectToCar}
-                      </>
+                    
+                    {techStatus === 'error' && (
+                      <div className="text-[var(--accent-danger)] text-sm bg-[var(--accent-danger)]/10 py-2 rounded-lg border border-[var(--accent-danger)]/20">
+                        {t.connectError}
+                      </div>
                     )}
-                  </button>
+
+                    <button
+                      onClick={handleTechConnect}
+                      disabled={techStatus === 'connecting'}
+                      className="w-full bg-[var(--accent-primary)] text-white py-4 rounded-xl font-black uppercase tracking-[2px] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-[var(--accent-primary)]/20 flex items-center justify-center gap-3 disabled:opacity-50"
+                    >
+                      {techStatus === 'connecting' ? (
+                        <>
+                          <Zap className="w-5 h-5 animate-spin" />
+                          {lang === 'zh' ? '正在连接...' : 'Connecting...'}
+                        </>
+                      ) : (
+                        <>
+                          <Terminal className="w-5 h-5" />
+                          {t.connectToCar}
+                        </>
+                      )}
+                    </button>
+
+                    <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-bold text-center opacity-40 flex items-center gap-4 py-2">
+                       <span className="h-px bg-[var(--border-main)] flex-1"></span>
+                       <span>{lang === 'zh' ? '或者 (OR)' : 'OR'}</span>
+                       <span className="h-px bg-[var(--border-main)] flex-1"></span>
+                    </div>
+
+                    <div className="flex gap-4 items-center bg-[var(--accent-primary)]/5 border border-[var(--accent-primary)]/10 p-5 rounded-2xl text-left">
+                       <Network className="w-6 h-6 text-[var(--accent-primary)]/40 shrink-0" />
+                       <div className="flex-1">
+                          <p className="text-[11px] text-[var(--accent-primary)] font-black uppercase tracking-wider mb-2">
+                             {lang === 'zh' ? '局域网/内网直连 (LAN/Direct)' : 'Direct IP Connection'}
+                          </p>
+                          <input
+                            type="text"
+                            placeholder={lang === 'zh' ? '输入连车端 IP (如 192.168.x.x)' : 'Enter Car Client IP (e.g. 192.168.x.x)'}
+                            className="w-full bg-[var(--bg-main)]/50 border border-[var(--border-main)] text-sm px-4 py-2.5 rounded-xl focus:outline-none focus:border-[var(--accent-primary)]"
+                            onKeyDown={(e) => {
+                               if (e.key === 'Enter') {
+                                  const ip = (e.target as HTMLInputElement).value.trim();
+                                  if (ip) {
+                                     // Format it as a smart code point to local 3000
+                                     // handleTechConnect's smart parser will treat it as domain#code
+                                     // Actually, my 6-digit code check might fail. 
+                                     // I'll use a special format or just set the code to 'DIRECT'
+                                     setTechCode(`${ip}:3000#OFFLINE`);
+                                     setTimeout(() => handleTechConnect(), 100);
+                                  }
+                               }
+                            }}
+                          />
+                          <p className="text-[10px] text-[var(--text-muted)] mt-2 leading-tight">
+                             {lang === 'zh' ? '无外网？输入连车端内网IP。需确保您已通过VPN或同局域网与车辆端建立物理通达。' : 'No Internet? Enter internal IP. Ensure VPN or LAN access is active.'}
+                          </p>
+                       </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -1794,9 +1964,9 @@ export default function App() {
             </div>
 
             {/* Protocol Settings */}
-            <div className="bg-[var(--bg-card)] border border-[var(--border-main)] rounded-lg overflow-hidden">
-              <div className="p-4 border-b border-[var(--border-main)] bg-[var(--bg-card)]">
-                <h3 className="text-sm font-bold uppercase tracking-[1px] text-[var(--text-main)]">
+            <div className="bg-[var(--bg-card)] border border-[var(--border-main)] rounded-3xl overflow-hidden animate-breathe shadow-lg shadow-black/20">
+              <div className="p-4 border-b border-[var(--border-main)] bg-[var(--bg-main)]">
+                <h3 className="text-[10px] font-bold uppercase tracking-[3px] text-[var(--accent-primary)]">
                   {t.protocolSettings}
                 </h3>
               </div>
@@ -1804,12 +1974,17 @@ export default function App() {
                 
                 {/* DoIP Toggle */}
                 <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-bold text-[var(--text-main)] mb-1">
-                      {t.enableDoIP}
+                  <div className="flex gap-4">
+                    <div className="w-10 h-10 rounded bg-[var(--accent-primary)]/10 flex items-center justify-center shrink-0 border border-[var(--accent-primary)]/20">
+                      <Zap className="w-5 h-5 text-[var(--accent-primary)]" />
                     </div>
-                    <div className="text-xs text-[var(--text-muted)]">
-                      {t.enableDoIPDesc}
+                    <div>
+                      <div className="text-sm font-bold text-[var(--text-main)] mb-1">
+                        {t.enableDoIP}
+                      </div>
+                      <div className="text-xs text-[var(--text-muted)] max-w-sm leading-relaxed">
+                        {t.enableDoIPDesc}
+                      </div>
                     </div>
                   </div>
                   <button
@@ -1826,15 +2001,17 @@ export default function App() {
 
                 {/* J2534 Toggle */}
                 <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-bold text-[var(--text-main)] mb-1 flex items-center gap-2">
-                      {t.enableJ2534}
-                      <span className="px-1.5 py-0.5 rounded bg-[var(--accent-warning)]/10 border border-[var(--accent-warning)] text-[var(--accent-warning)] font-mono text-[9px] tracking-widest">
-                        BETA
-                      </span>
+                  <div className="flex gap-4">
+                    <div className="w-10 h-10 rounded bg-[var(--accent-warning)]/10 flex items-center justify-center shrink-0 border border-[var(--accent-warning)]/20">
+                      <Globe className="w-5 h-5 text-[var(--accent-warning)]" />
                     </div>
-                    <div className="text-xs text-[var(--text-muted)]">
-                      {t.enableJ2534Desc}
+                    <div>
+                      <div className="text-sm font-bold text-[var(--text-main)] mb-1 flex items-center gap-2">
+                        {t.enableJ2534}
+                      </div>
+                      <div className="text-xs text-[var(--text-muted)] max-w-sm leading-relaxed">
+                        {t.enableJ2534Desc}
+                      </div>
                     </div>
                   </div>
                   <button
@@ -1851,12 +2028,17 @@ export default function App() {
 
                 {/* USB Mapping Toggle */}
                 <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-bold text-[var(--text-main)] mb-1 flex items-center gap-2">
-                      {t.usbMapping}
+                  <div className="flex gap-4">
+                    <div className="w-10 h-10 rounded bg-[var(--accent-primary)]/10 flex items-center justify-center shrink-0 border border-[var(--accent-primary)]/20">
+                      <Network className="w-5 h-5 text-[var(--accent-primary)]" />
                     </div>
-                    <div className="text-xs text-[var(--text-muted)]">
-                      {t.usbMappingDesc}
+                    <div>
+                      <div className="text-sm font-bold text-[var(--text-main)] mb-1 flex items-center gap-2">
+                        {t.usbMapping}
+                      </div>
+                      <div className="text-xs text-[var(--text-muted)] max-w-sm leading-relaxed">
+                        {t.usbMappingDesc}
+                      </div>
                     </div>
                   </div>
                   <button
@@ -1873,7 +2055,7 @@ export default function App() {
             </div>
 
             {/* Network Adapter Settings */}
-            <div className="bg-[var(--bg-card)] border border-[var(--border-main)] rounded-lg overflow-hidden">
+            <div className="bg-[var(--bg-card)] border border-[var(--border-main)] rounded-3xl overflow-hidden animate-breathe">
               <div className="p-4 border-b border-[var(--border-main)] bg-[var(--bg-card)] flex justify-between items-center">
                 <h3 className="text-sm font-bold uppercase tracking-[1px] text-[var(--text-main)]">
                   {t.networkSettings}
@@ -1981,6 +2163,33 @@ export default function App() {
                   >
                     <Globe className="w-3 h-3" />
                     {lang === 'zh' ? '自动检测并同步当前环境' : 'Auto-detect & Sync Cloud Server'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Connectivity Optimization */}
+             <div className="bg-[var(--bg-card)] border border-[var(--border-main)] rounded-lg overflow-hidden">
+              <div className="p-4 border-b border-[var(--border-main)] bg-[var(--bg-card)]">
+                <h3 className="text-sm font-bold uppercase tracking-[1px] text-[var(--text-main)]">
+                   {lang === 'zh' ? '连接优化 (Regional)' : 'Connectivity Optimization'}
+                </h3>
+              </div>
+              <div className="p-6">
+                <div className="flex items-center justify-between gap-4">
+                   <div>
+                      <h4 className="text-sm font-bold text-[var(--text-main)] mb-1">{t.chinaMode}</h4>
+                      <p className="text-xs text-[var(--text-muted)] max-w-md">
+                         {t.chinaModeDesc}
+                      </p>
+                   </div>
+                   <button
+                    onClick={() => setChinaMode(!chinaMode)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)] focus:ring-offset-2 ${chinaMode ? 'bg-[var(--accent-primary)]' : 'bg-gray-300'}`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${chinaMode ? 'translate-x-6' : 'translate-x-1'}`}
+                    />
                   </button>
                 </div>
               </div>

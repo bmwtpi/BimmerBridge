@@ -24,6 +24,7 @@ interface Session {
   carAgent?: Agent;
   techAgent?: Agent;
   adminAgent?: Agent;
+  owner?: string; // Track who created the session
   createdAt: number;
 }
 
@@ -89,11 +90,36 @@ async function startServer() {
   });
 
   app.post('/api/sessions', (req, res) => {
+    // Only one session per user/owner to keep the list clean
+    const { replaceSessionId, owner } = req.body;
+    
+    // 1. Cleanup by ID if requested
+    if (replaceSessionId) {
+      for (const [code, session] of sessions.entries()) {
+        if (session.id === replaceSessionId) {
+          sessions.delete(code);
+          break;
+        }
+      }
+    }
+
+    // 2. Cleanup by owner (username) if provided
+    if (owner) {
+      for (const [code, session] of sessions.entries()) {
+        if (session.owner === owner) {
+          sessions.delete(code);
+          // Only one per owner, we can break after finding one
+          // Or keep going to be sure
+        }
+      }
+    }
+
     const sessionId = uuidv4();
     const code = generateCode();
     sessions.set(code, {
       id: sessionId,
       code,
+      owner,
       createdAt: Date.now(),
     });
     res.json({ sessionId, code });
@@ -169,7 +195,7 @@ async function startServer() {
   });
 
   // WebSocket Logic
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req) => {
     let currentAgent: Agent | null = null;
 
     ws.on('message', (message, isBinary) => {
@@ -179,7 +205,9 @@ async function startServer() {
           
           if (data.type === 'auth') {
             const { role, code } = data;
-            const ip = (ws as any)._socket.remoteAddress;
+            // Get IP from x-forwarded-for if behind proxy
+            const forwarded = (req.headers['x-forwarded-for'] as string);
+            const ip = forwarded ? forwarded.split(',')[0].trim() : req.socket.remoteAddress || 'unknown';
 
             // Check lockout
             const attempt = failedAttempts.get(ip);

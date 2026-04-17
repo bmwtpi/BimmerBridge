@@ -54,3 +54,66 @@
     --accent-warning: #D97706;
   }
 }
+
+@keyframes breathe {
+  0% { border-color: var(--border-main); box-shadow: 0 0 5px rgba(46, 134, 222, 0.1); }
+  50% { border-color: var(--accent-primary); box-shadow: 0 0 15px rgba(46, 134, 222, 0.3); }
+  100% { border-color: var(--border-main); box-shadow: 0 0 5px rgba(46, 134, 222, 0.1); }
+}
+
+.animate-breathe {
+  animation: breathe 4s ease-in-out infinite;
+}
+
+.cyber-grid {
+  background-image: 
+    linear-gradient(rgba(46, 134, 222, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(46, 134, 222, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.scanline {
+  width: 100%;
+  height: 100px;
+  z-index: 99;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0) 0%, rgba(46, 134, 222, 0.05) 50%, rgba(0, 0, 0, 0) 100%);
+  opacity: 0.1;
+  position: absolute;
+  top: 0;
+  left: 0;
+  animation: scanline 10s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+.glow-text {
+  text-shadow: 0 0 10px rgba(46, 134, 222, 0.5);
+}
+
+.cyber-accent-line {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
+  width: 100%;
+  opacity: 0.5;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--border-main);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
