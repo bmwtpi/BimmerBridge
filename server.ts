@@ -5,8 +5,10 @@ import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import os from 'os';
+import dgram from 'dgram';
 
 const PORT = 3000;
+const ZGW_PORT = 13400; // BMW DoIP Discovery Protocol Port
 
 interface Agent {
   id: string;
@@ -49,6 +51,29 @@ async function startServer() {
   const app = express();
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server, path: '/bridge' });
+
+  // Project X Style ZGW Discovery
+  const udpDiscovery = dgram.createSocket('udp4');
+  udpDiscovery.on('error', (err) => {
+    console.error(`UDP Error: ${err.stack}`);
+    udpDiscovery.close();
+  });
+
+  udpDiscovery.on('message', (msg, rinfo) => {
+    // BMW Detection logic: Check for Vehicle Identification response
+    if (msg.length > 8 && msg[0] === 0x02 && msg[1] === 0xfd) {
+       console.log(`[NETWORK] BMW ZGW Detected at ${rinfo.address}`);
+    }
+  });
+
+  try {
+    udpDiscovery.bind(ZGW_PORT, '0.0.0.0', () => {
+      udpDiscovery.setBroadcast(true);
+      console.log(`[NETWORK] Project X ZGW Discovery listening on ${ZGW_PORT}`);
+    });
+  } catch (e) {
+    console.log('[NETWORK] ZGW Port occupied. Running in relay-only fallback.');
+  }
 
   app.use(cors());
   app.use(express.json());
@@ -377,8 +402,15 @@ async function startServer() {
   }
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
+    console.log(`[BOOT] ==========================================`);
+    console.log(`[BOOT] BimmerBridge ENET Server is LIVE`);
+    console.log(`[BOOT] URL: http://0.0.0.0:${PORT}`);
+    console.log(`[BOOT] Mode: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`[BOOT] Time: ${new Date().toISOString()}`);
+    console.log(`[BOOT] ==========================================`);
   });
 }
 
-startServer();
+startServer().catch(err => {
+  console.error('[FATAL] Server failed to start:', err);
+});

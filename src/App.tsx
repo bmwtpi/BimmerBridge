@@ -219,13 +219,13 @@ export default function App() {
   const getApiBase = () => {
     if (customServer) return customServer.replace(/\/$/, '');
     
-    // In Browser Preview or standard web environment
-    if (window.location.protocol !== 'file:') {
-       return ''; // Relative to current domain
+    // For compiled EXE or local file mode, STRICTLY use the cloud deployment
+    if (window.location.protocol === 'file:' || window.location.hostname === 'localhost') {
+       return DEPLOY_URL;
     }
     
-    // For compiled EXE connecting back to cloud
-    return DEPLOY_URL;
+    // Browser Preview environment
+    return ''; 
   };
 
   const getWsBase = () => {
@@ -233,11 +233,11 @@ export default function App() {
        return customServer.replace(/^http/i, 'ws').replace(/\/$/, '');
     }
     
-    if (window.location.protocol !== 'file:') {
-       return window.location.origin.replace(/^http/i, 'ws');
+    if (window.location.protocol === 'file:' || window.location.hostname === 'localhost') {
+       return DEPLOY_URL.replace(/^http/i, 'ws');
     }
     
-    return DEPLOY_URL.replace(/^http/i, 'ws');
+    return window.location.origin.replace(/^http/i, 'ws');
   };
 
   const API_BASE = getApiBase();
@@ -288,10 +288,20 @@ export default function App() {
 
   // Theme State
   const [theme, setTheme] = useState<'dark' | 'light' | 'pink'>('dark');
+  const [debugLogs, setDebugLogs] = useState<{timestamp: string, message: string, type: 'info' | 'error' | 'success'}[]>([]);
+  const [showLogs, setShowLogs] = useState(false);
+
+  const addLog = (message: string, type: 'info' | 'error' | 'success' = 'info') => {
+    const timestamp = new Date().toLocaleTimeString();
+    setDebugLogs(prev => [...prev.slice(-49), { timestamp, message, type }]);
+    console.log(`[${timestamp}] ${message}`);
+  };
 
   useEffect(() => {
-    document.documentElement.className = theme === 'dark' ? '' : `theme-${theme}`;
-  }, [theme]);
+    addLog('System Initialized', 'success');
+    addLog(`Environment: ${window.location.protocol}`, 'info');
+    addLog(`API Base: ${API_BASE || 'Relative'}`, 'info');
+  }, []);
 
   const t = translations[lang];
 
@@ -430,28 +440,34 @@ export default function App() {
   const [serverError, setServerError] = useState<string | null>(null);
 
   const checkServerHealth = async (retries = 5) => {
+    addLog(`Probing signaling server health (Retries left: ${retries})...`, 'info');
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout for slow networks
       
-      const res = await fetch(`${API_BASE}/api/health`, { signal: controller.signal });
+      const healthUrl = `${API_BASE}/api/health`;
+      const res = await fetch(healthUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
       
       if (res.ok) {
+        addLog('Signaling server is online and healthy', 'success');
         setIsServerReady(true);
         setServerError(null);
         return true;
       }
     } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown';
+      addLog(`Health check failed: ${msg}`, 'error');
       if (retries > 0) {
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        await new Promise(resolve => setTimeout(resolve, 2000));
         return checkServerHealth(retries - 1);
       }
     }
 
     // After all retries fail
-    setIsServerReady(true); // Don't block UI
-    return true;
+    setIsServerReady(false); 
+    setServerError('SIGNALLING_OFFLINE');
+    return false;
   };
 
   useEffect(() => {
@@ -494,15 +510,23 @@ export default function App() {
       setSessions(data);
       return data;
     } catch (e) {
-      if (e instanceof Error && e.name === 'TypeError' && e.message === 'Failed to fetch') {
-        console.error('Network error: Server might be restarting or unreachable');
+      const isNetworkError = e instanceof Error && e.name === 'TypeError' && (e.message.includes('Failed to fetch') || e.message.includes('NetworkError'));
+      if (isNetworkError) {
+        addLog('Network error: Signaling server is unreachable. Please check your internet or server IP.', 'error');
+        setServerError('SIGNALLING_OFFLINE');
       } else {
-        console.error('Failed to fetch sessions:', e);
+        addLog(`Fetch sessions failed: ${e instanceof Error ? e.message : 'Unknown'}`, 'error');
+        setServerError('SESSIONS_LOAD_FAILED');
       }
       return [];
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRetryConnection = () => {
+    setServerError(null);
+    checkServerHealth(3);
   };
 
   const handleDeleteSession = async (sessionId: string, e: React.MouseEvent) => {
@@ -637,6 +661,14 @@ export default function App() {
     const pc = new RTCPeerConnection(config);
     pcRef.current = pc;
 
+    // P2P Watchdog: If not connected in 10s, fallback to relay
+    const p2pWatchdog = setTimeout(() => {
+      if (pc.connectionState !== 'connected' && pc.connectionState !== 'closed') {
+        addLog('P2P Hole Punching timed out. Falling back to secure Relay...', 'info');
+        setConnectionMode('relay');
+      }
+    }, 10000);
+
     pc.onicecandidate = (event) => {
       if (event.candidate && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'webrtc_candidate', candidate: event.candidate }));
@@ -644,10 +676,14 @@ export default function App() {
     };
 
     pc.onconnectionstatechange = () => {
+       addLog(`ICE Detail: ${pc.connectionState}`, 'info');
        if (pc.connectionState === 'connected') {
+          clearTimeout(p2pWatchdog);
           setConnectionMode('p2p');
+          addLog('P2P High-Speed Tunnel Established!', 'success');
        } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
           setConnectionMode('relay');
+          addLog('P2P Link broken. Switched to Relay.', 'info');
        }
     };
 
@@ -706,13 +742,15 @@ export default function App() {
       });
     } else if (data.type === 'peer_connected') {
       setIsPeerConnected(true);
-      // Tech client is the initiator
+      addLog(`Peer linked: ${data.role}. Negotiating high-speed tunnel...`, 'info');
+      // STRICT: ONLY the tech client initiates the WebRTC offer to avoid collision
       if (activeTab === 'tech') {
         setupP2P(ws, true);
       }
     } else if (data.type === 'peer_disconnected') {
       setIsPeerConnected(false);
       setConnectionMode('relay');
+      addLog('Peer disconnected. Reverted to relay mode.', 'info');
     } else if (data.type === 'car_info') {
       setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, carIp: data.ip, carVin: data.vin } : s));
     } else if (data.type === 'webrtc_offer') {
@@ -822,10 +860,7 @@ export default function App() {
           const data = JSON.parse(event.data);
           handleIncomingData(data, ws, code, sessionId);
           
-          // If peer connects, Car starts the offer (let's just pick one side)
-          if (data.type === 'peer_connected' && data.role === 'tech') {
-              setupP2P(ws, true);
-          }
+          // REMOVED: Duplicate P2P initiator here. Tech side handles it now.
         } catch (e) {}
       }
     };
@@ -897,12 +932,18 @@ export default function App() {
         }
       }
     } else if (rawInput.length >= 6 && /^[0-9A-Z]+$/i.test(rawInput)) {
-      // 6-digit short code: use default DEPLOY_URL if available
+      // 6-digit short code
       targetCode = rawInput.toUpperCase();
-      if (DEPLOY_URL && window.location.protocol === 'file:') {
-        const cloudHost = DEPLOY_URL.includes(':') ? DEPLOY_URL : `${DEPLOY_URL}:3000`;
-        targetApiBase = `http://${cloudHost}`;
-        targetWsBase = `ws://${cloudHost}`;
+      
+      if (window.location.hostname.includes('run.app') || window.location.hostname.includes('webcontainer')) {
+        // We are in the AI Studio environment - use the CURRENT server for testing
+        targetApiBase = API_BASE;
+        targetWsBase = WS_BASE;
+      } else {
+        // We are in a standalone build (EXE/local) - target the cloud server
+        const host = DEPLOY_HOST || '120.78.234.56:3000';
+        targetApiBase = `http://${host}`;
+        targetWsBase = `ws://${host}`;
       }
     } else if (rawInput.includes('.') && rawInput.length > 10) {
       return;
@@ -932,19 +973,20 @@ export default function App() {
     };
 
     try {
+      addLog(`Connecting to: ${wsUrl}`, 'info');
       const ws = new WebSocket(wsUrl);
       setTechWs(ws);
 
       const connectionTimeout = setTimeout(() => {
         if (ws.readyState !== WebSocket.OPEN) {
+          addLog('Handshake timeout (10s)!', 'error');
           ws.close();
           handleTechError(new Error('Timeout'));
         }
       }, 10000);
 
       const handleTechError = (e: any) => {
-        console.error('Tech WS Error:', e);
-        console.log('Failed connection target:', wsUrl);
+        addLog(`Socket Error on ${wsUrl}. Check if server is running or port 3000 is open.`, 'error');
         setTechStatus('error');
         alert(lang === 'zh' 
           ? `配对失败：无法与全球信令中心建立握手。\n\n请检查：\n1. 您的防火墙是否允许 TCP 3000 端口通讯\n2. 另一端（车辆端）是否已经成功生成了连接码\n3. 网络环境是否处于极度严格的局域网管控下`
@@ -953,6 +995,7 @@ export default function App() {
 
       ws.onopen = () => {
         clearTimeout(connectionTimeout);
+        addLog('Socket established. Authenticating with pairing code...', 'success');
         ws.send(JSON.stringify({ type: 'auth', role: 'tech', code: targetCode }));
       };
 
@@ -960,7 +1003,9 @@ export default function App() {
         if (typeof event.data === 'string') {
           try {
             const data = JSON.parse(event.data);
+            addLog(`Event: ${data.type}`, 'info');
             if (data.type === 'auth_success') {
+              addLog('Auth SUCCESS: Session linked.', 'success');
               setTechStatus('connected');
               fetchSessionsFromUrl();
               setActiveTab('dashboard');
@@ -970,20 +1015,24 @@ export default function App() {
             }
             
             // Critical: find sessionId if we only have code
-            const currentSessionId = data.sessionId || (sessions.find(s => s.code === targetCode)?.id) || '';
+            const session = sessions.find(s => s.code === targetCode);
+            const currentSessionId = data.sessionId || session?.id || '';
             handleIncomingData(data, ws, targetCode, currentSessionId);
-          } catch (e) {}
+          } catch (e) {
+            addLog('Received binary or non-JSON payload', 'info');
+          }
         }
       };
 
       ws.onerror = handleTechError;
       ws.onclose = () => {
+        addLog('WebSocket link closed.', 'info');
         if (techStatus === 'connected') setTechStatus('idle');
         setTechWs(null);
       };
     } catch(e) {
+      addLog(`Fatal connection error: ${e instanceof Error ? e.message : 'Unknown'}`, 'error');
       setTechStatus('error');
-      console.error(e);
     }
   };
 
@@ -1238,12 +1287,12 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-main)] text-[var(--text-main)] font-sans selection:bg-[var(--accent-primary)]/30 flex flex-col relative overflow-hidden">
+    <div className="h-screen bg-[var(--bg-main)] text-[var(--text-main)] font-sans selection:bg-[var(--accent-primary)]/30 flex flex-col relative overflow-hidden">
       <div className="scanline" />
-      <div className="absolute inset-0 cyber-grid pointer-events-none" />
+      <div className="absolute inset-0 cyber-grid pointer-events-none opacity-50" />
       {/* Header */}
-      <header className="h-[60px] border-b border-[var(--border-main)] bg-[var(--bg-card)] flex items-center sticky top-0 z-10 shrink-0">
-        <div className="w-full max-w-7xl mx-auto px-6 flex items-center justify-between">
+      <header className="h-[50px] border-b border-[var(--border-main)] bg-[var(--bg-card)] flex items-center sticky top-0 z-10 shrink-0">
+        <div className="w-full max-w-4xl mx-auto px-4 flex items-center justify-between">
           <div className="flex items-center gap-3 font-bold tracking-[1px] uppercase">
             <div className="w-6 h-6 bg-[var(--accent-primary)] rounded flex items-center justify-center">
               <Network className="w-4 h-4 text-white" />
@@ -1323,30 +1372,91 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-6 py-8">
+      <main className="flex-1 w-full max-w-4xl mx-auto px-6 py-6 overflow-y-auto">
+        {showLogs && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in zoom-in duration-300">
+            <div className="w-full max-w-2xl bg-[#0a0a0b] border border-[var(--border-main)] rounded-2xl shadow-3xl overflow-hidden flex flex-col h-[500px]">
+              <div className="p-4 border-b border-[var(--border-main)] flex items-center justify-between bg-[var(--bg-card)]">
+                <div className="flex items-center gap-2">
+                  <Terminal className="w-4 h-4 text-[var(--accent-primary)]" />
+                  <h3 className="text-xs font-bold uppercase tracking-[2px]">{lang === 'zh' ? '系统诊断日志' : 'System Diagnostic Logs'}</h3>
+                </div>
+                <button onClick={() => setShowLogs(false)} className="p-1 hover:bg-white/10 rounded-full transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-2 font-mono text-[11px] custom-scrollbar bg-black/40">
+                {debugLogs.length === 0 && <div className="text-center py-20 text-[var(--text-muted)] animate-pulse">Initializing kernels...</div>}
+                {debugLogs.map((log, i) => (
+                  <div key={i} className="flex gap-3 leading-relaxed border-b border-white/[0.03] pb-1 animate-in slide-in-from-left-2 duration-300">
+                    <span className="text-[var(--text-muted)] shrink-0 select-none">[{log.timestamp}]</span>
+                    <span className={log.type === 'error' ? 'text-rose-500' : log.type === 'success' ? 'text-emerald-500' : 'text-blue-400'}>
+                      {log.type === 'error' ? '● ERROR:' : log.type === 'success' ? '● OK:' : '○ INFO:'}
+                    </span>
+                    <span className="text-gray-300 break-all">{log.message}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="p-3 border-t border-[var(--border-main)] bg-[var(--bg-card)] flex justify-between items-center">
+                <span className="text-[9px] text-[var(--text-muted)] uppercase tracking-wider">Session ID: {adminToken?.slice(0,8) || 'GUEST'}</span>
+                <button 
+                  onClick={() => setDebugLogs([])}
+                  className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] hover:text-white transition-colors"
+                >
+                  {lang === 'zh' ? '清空' : 'Clear'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {!isServerReady && (
-          <div className="flex flex-col items-center justify-center h-[calc(100vh-250px)] animate-in fade-in duration-700">
-            <div className="w-16 h-16 border-4 border-[var(--accent-primary)]/20 border-t-[var(--accent-primary)] rounded-full animate-spin mb-6"></div>
-            <h3 className="text-xl font-bold text-[var(--text-main)] mb-2">
-              {lang === 'zh' ? '正在启动后台服务...' : 'Starting Backend Service...'}
-            </h3>
-            <p className="text-[var(--text-muted)] text-sm">
-              {serverError || (lang === 'zh' ? '这可能需要几秒钟，请稍候。' : 'This may take a few seconds, please wait.')}
-            </p>
-            {serverError && (
-              <button 
-                onClick={() => window.location.reload()}
-                className="mt-6 px-6 py-2 bg-[var(--accent-primary)] text-white rounded font-bold uppercase tracking-wider text-xs"
-              >
-                {lang === 'zh' ? '重试' : 'Retry'}
-              </button>
+          <div className="flex flex-col items-center justify-center min-h-[400px] animate-in fade-in duration-700">
+            {serverError === 'SIGNALLING_OFFLINE' ? (
+              <div className="text-center p-8 bg-[var(--accent-danger)]/5 border border-[var(--accent-danger)]/20 rounded-3xl max-w-md">
+                <div className="w-16 h-16 bg-[var(--accent-danger)]/10 rounded-full flex items-center justify-center mx-auto mb-6 text-[var(--accent-danger)]">
+                  <Network className="w-8 h-8" />
+                </div>
+                <h3 className="text-xl font-bold text-[var(--text-main)] mb-3">
+                  {lang === 'zh' ? '服务器连接失败' : 'Server Unreachable'}
+                </h3>
+                <p className="text-[var(--text-muted)] text-sm mb-6 leading-relaxed">
+                  {lang === 'zh' 
+                    ? '无法连接到信令服务器。请检查您的网络连接，或确保阿里云服务器 IP 正确配置且已开启。' 
+                    : 'The signaling server is offline. Please check your internet connection or ensure the cloud server IP is correctly configured and accessible.'}
+                </p>
+                <div className="flex flex-col gap-3">
+                  <button 
+                    onClick={handleRetryConnection}
+                    className="w-full py-3 bg-[var(--accent-danger)] text-white rounded-xl font-bold uppercase tracking-wider text-xs hover:bg-[var(--accent-danger)]/90 transition-all shadow-[0_4px_15px_rgba(235,59,90,0.3)]"
+                  >
+                    {lang === 'zh' ? '立即重试' : 'Retry Connection'}
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('settings')}
+                    className="w-full py-3 bg-white/5 text-[var(--text-main)] rounded-xl font-bold uppercase tracking-wider text-xs hover:bg-white/10 transition-all"
+                  >
+                    {lang === 'zh' ? '前往设置修改 IP' : 'Edit IP in Settings'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="w-16 h-16 border-4 border-[var(--accent-primary)]/20 border-t-[var(--accent-primary)] rounded-full animate-spin mb-6 shadow-[0_0_20px_rgba(46,134,222,0.2)]"></div>
+                <h3 className="text-xl font-bold text-[var(--text-main)] mb-2">
+                  {lang === 'zh' ? '正在启动 BimmerBridge...' : 'Initializing BimmerBridge...'}
+                </h3>
+                <p className="text-[var(--text-muted)] text-sm italic">
+                  {lang === 'zh' ? '正在连接到诊断骨干网，请稍候...' : 'Establishing link to diagnostic backbone...'}
+                </p>
+              </>
             )}
           </div>
         )}
 
         {isServerReady && activeTab === "dashboard" && isAuthenticated && (
-          <div className="flex flex-col h-[calc(100vh-180px)]">
-            <div className="flex justify-between items-center mb-6">
+          <div className="flex flex-col h-full max-w-3xl mx-auto">
+            <div className="flex justify-between items-center mb-4">
               <div>
                 <h2 className="text-[11px] uppercase tracking-[2px] text-[var(--text-muted)] mb-2">
                   {t.remoteSessions}
@@ -1362,9 +1472,9 @@ export default function App() {
               </button>
             </div>
 
-            <div className="flex flex-1 gap-6 overflow-hidden">
+            <div className="flex flex-1 gap-4 overflow-hidden">
               {/* Left Sidebar: Session List + Details */}
-              <div className="w-80 flex-shrink-0 flex flex-col gap-6 overflow-hidden animate-breathe p-1 rounded-2xl border border-[var(--border-main)]">
+              <div className="w-64 flex-shrink-0 flex flex-col gap-4 overflow-hidden animate-breathe p-1 rounded-2xl border border-[var(--border-main)]">
                 <div className="flex-1 flex flex-col gap-3 overflow-y-auto pr-2 custom-scrollbar">
                   {loading ? (
                     <div className="text-center py-12 text-[var(--text-muted)] font-mono text-sm">
@@ -2226,6 +2336,18 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* Floating Log Trigger */}
+      <button 
+        onClick={() => setShowLogs(true)}
+        className="fixed bottom-6 right-6 w-12 h-12 bg-[#0d0d0e]/80 backdrop-blur border border-[var(--border-main)] rounded-full flex items-center justify-center shadow-2xl hover:border-[var(--accent-primary)] hover:scale-110 active:scale-95 transition-all z-50 group"
+        title={lang === 'zh' ? '查看系统日志' : 'View System Logs'}
+      >
+        <Terminal className="w-5 h-5 text-[var(--text-muted)] group-hover:text-[var(--accent-primary)] group-hover:animate-pulse" />
+        {debugLogs.some(l => l.type === 'error') && (
+          <div className="absolute top-0 right-0 w-3 h-3 bg-red-500 border-2 border-[#0d0d0e] rounded-full animate-bounce"></div>
+        )}
+      </button>
 
       {/* Footer */}
       <footer className="border-t border-[var(--border-main)] bg-[var(--bg-card)] py-6 shrink-0">
