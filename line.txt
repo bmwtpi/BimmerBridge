@@ -1,0 +1,2 @@
+  const handleEnableDiagMode = async (sessionId: string) => {
+                          onClick={() => sessionId && handleEnableDiagMode(sessionId)}

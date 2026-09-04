@@ -15,17 +15,19 @@
 
 @layer base {
   :root {
-    /* Default Dark Theme */
-    --bg-main: #0A0B0D;
-    --bg-card: #15171B;
-    --text-main: #E0E0E0;
-    --text-muted: #7F8C8D;
-    --border-main: #2C3E50;
-    --accent-primary: #2E86DE;
-    --accent-success: #27AE60;
-    --accent-danger: #c0392b;
-    --accent-danger-hover: #e74c3c;
-    --accent-warning: #E67E22;
+    /* Hardcore Dark Tool Theme */
+    --bg-main: #000000;
+    --bg-card: #121212;
+    --text-main: #e0e0e0;
+    --text-muted: #888888;
+    --border-main: #2a2a2a;
+    --accent-primary: #ff4757;
+    --accent-success: #2ed573;
+    --accent-danger: #ea2027;
+    --accent-danger-hover: #ff4d4d;
+    --accent-warning: #ffa502;
+    
+    --btn-red-gradient: linear-gradient(180deg, #ff4d4d 0%, #a50000 100%);
   }
 
   .theme-light {
@@ -51,7 +53,34 @@
     --accent-success: #10B981;
     --accent-danger: #E11D48;
     --accent-danger-hover: #BE123C;
-    --accent-warning: #D97706;
+  }
+}
+
+@layer components {
+  .az-btn-red {
+    @apply relative px-8 py-3 text-white font-bold text-sm uppercase tracking-wider rounded border border-black/50 shadow-inner active:scale-95 transition-all text-center flex items-center justify-center;
+    background: var(--btn-red-gradient);
+    box-shadow: 0 4px 0 #600000, 0 8px 15px rgba(0,0,0,0.4);
+  }
+  
+  .az-btn-red:active {
+    box-shadow: 0 1px 0 #600000, 0 4px 8px rgba(0,0,0,0.4);
+    transform: translateY(3px);
+  }
+
+  .az-btn-red:disabled {
+    @apply opacity-50 grayscale cursor-not-allowed;
+    box-shadow: none;
+    transform: none;
+  }
+
+  .az-btn-dark {
+     @apply px-8 py-3 bg-[#222] border border-[#444] text-[var(--text-muted)] font-bold text-sm uppercase tracking-wider rounded hover:bg-[#333] hover:text-white transition-all text-center flex items-center justify-center;
+  }
+
+  .az-log-window {
+    @apply bg-black border border-[#111] rounded-sm p-4 font-mono text-[11px] leading-5 overflow-y-auto text-green-500;
+    box-shadow: inset 0 0 15px rgba(0,0,0,0.9);
   }
 }
 

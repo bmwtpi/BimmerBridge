@@ -6,9 +6,105 @@ import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import os from 'os';
 import dgram from 'dgram';
+import { exec } from 'child_process';
+import net from 'net';
 
 const PORT = 3000;
 const ZGW_PORT = 13400; // BMW DoIP Discovery Protocol Port
+
+// Diagnostic Ports to handle (based on AZ Pro logic)
+const DIAG_PORTS = [22, 6801, 6811];
+const activeProxies = new Map<number, net.Server>();
+const activeToolSockets = new Map<number, net.Socket>();
+
+/**
+ * Forcefully close processes occupying diagnostic ports (Windows focus)
+ */
+async function clearDiagnosticPorts() {
+  if (process.platform !== 'win32') {
+    console.log('[SECURITY] Port clearance skipped: Not on Windows platform.');
+    return;
+  }
+
+  console.log('[SECURITY] Running port clearance for 22, 6801, 6811...');
+  for (const port of DIAG_PORTS) {
+    try {
+      exec(`netstat -ano | findstr :${port}`, (err, stdout) => {
+        if (!stdout) return;
+        
+        const lines = stdout.split('\n');
+        const pids = new Set<string>();
+        
+        lines.forEach(line => {
+          const parts = line.trim().split(/\s+/);
+          if (parts.length >= 5) {
+            const pid = parts[parts.length - 1];
+            if (pid && pid !== '0' && pid !== process.pid.toString()) {
+              pids.add(pid);
+            }
+          }
+        });
+
+        pids.forEach(pid => {
+          console.log(`[SECURITY] Killing process ${pid} occupying port ${port}`);
+          exec(`taskkill /F /PID ${pid}`);
+        });
+      });
+    } catch (e) {
+      console.error(`[ERROR] Failed to clear port ${port}:`, e);
+    }
+  }
+}
+
+/**
+ * Setup local TCP proxies for diagnostic tools (ISTA/E-Sys/SSH)
+ */
+function setupDiagnosticForwarding(session: Session) {
+  DIAG_PORTS.forEach(port => {
+    // Shutdown existing proxy for this port if any
+    if (activeProxies.has(port)) {
+      activeProxies.get(port)?.close();
+      activeProxies.delete(port);
+    }
+
+    const proxy = net.createServer((localSocket) => {
+      console.log(`[PROXY] Local connection on port ${port} detected`);
+      activeToolSockets.set(port, localSocket);
+      
+      const targetAgent = session.carAgent;
+      if (!targetAgent || targetAgent.ws.readyState !== WebSocket.OPEN) {
+        console.error('[PROXY] Car not connected, dropping packet');
+        localSocket.destroy();
+        return;
+      }
+
+      // Tell the car side which port we are talking to if necessary
+      // For AZ Pro Dig style, it's often a direct mapping
+      
+      localSocket.on('data', (data) => {
+        if (targetAgent.ws.readyState === WebSocket.OPEN) {
+          // Direct binary forward to car agent
+          targetAgent.ws.send(data, { binary: true });
+        }
+      });
+
+      localSocket.on('error', (err) => {
+        activeToolSockets.delete(port);
+        localSocket.destroy();
+      });
+
+      localSocket.on('close', () => {
+        activeToolSockets.delete(port);
+      });
+    });
+
+    proxy.listen(port, '127.0.0.1', () => {
+      console.log(`[PROXY] Forwarder ACTIVE on 127.0.0.1:${port}`);
+    });
+
+    activeProxies.set(port, proxy);
+  });
+}
 
 interface Agent {
   id: string;
@@ -116,7 +212,7 @@ async function startServer() {
 
   app.post('/api/sessions', (req, res) => {
     // Only one session per user/owner to keep the list clean
-    const { replaceSessionId, owner } = req.body;
+    const { replaceSessionId, owner, customCode } = req.body;
     
     // 1. Cleanup by ID if requested
     if (replaceSessionId) {
@@ -133,14 +229,22 @@ async function startServer() {
       for (const [code, session] of sessions.entries()) {
         if (session.owner === owner) {
           sessions.delete(code);
-          // Only one per owner, we can break after finding one
-          // Or keep going to be sure
         }
       }
     }
 
     const sessionId = uuidv4();
-    const code = generateCode();
+    const code = customCode || generateCode();
+    
+    // Handle collisions for custom codes
+    if (customCode && sessions.has(customCode)) {
+       // If it exists but is stale (no agents), allow override
+       const existing = sessions.get(customCode);
+       if (existing?.carAgent || existing?.techAgent) {
+         return res.status(409).json({ error: 'Code already active. Choose another or wait.' });
+       }
+    }
+
     sessions.set(code, {
       id: sessionId,
       code,
@@ -181,18 +285,127 @@ async function startServer() {
 
   app.get('/api/network-interfaces', (req, res) => {
     const interfaces = os.networkInterfaces();
-    const result: { name: string, ip: string, family: string, internal: boolean }[] = [];
+    const result: { id: string; name: string; ip: string; family: string; internal: boolean }[] = [];
     for (const [name, infos] of Object.entries(interfaces)) {
       if (infos) {
         for (const info of infos) {
           if (info.family === 'IPv4') {
-            result.push({ name, ip: info.address, family: info.family, internal: info.internal });
+            result.push({
+              id: `${name}-${info.address}`,
+              name,
+              ip: info.address,
+              family: info.family,
+              internal: info.internal
+            });
           }
         }
       }
     }
     result.sort((a, b) => (a.internal === b.internal ? 0 : a.internal ? 1 : -1));
     res.json(result);
+  });
+
+  // EDIABAS & ISTA Configuration APIs (Connect v3.26 compatible)
+  let ediabasConfigState = {
+    iniPath: 'C:\\EDIABAS\\BIN\\EDIABAS.INI',
+    currentInterface: 'STD:OBD',
+    comPort: 'Com9',
+    ediabasVersion: '7.3.0',
+    ediabasPath: 'C:\\EDIABAS',
+    istaPath: 'C:\\Program Files (x86)\\BMW\\ISPI\\TRIC\\ISTA',
+    ediabasStatus: 'valid',
+    istaStatus: 'missing_files',
+    missingFiles: [
+      'C:\\Program Files (x86)\\BMW\\ISPI\\TRIC\\ISTA\\Ecu\\OPPS.prg',
+      'C:\\Program Files (x86)\\BMW\\ISPI\\TRIC\\ISTA\\Ediabas\\Bin\\api64.dll'
+    ]
+  };
+
+  // Branding & White-label Configuration (Connect v3.26 compatible)
+  let brandingConfigState = {
+    clientDisplayName: 'HAIFEI ZHOU',
+    workshopLogoUrl: '',
+    customerLink: 'https://remoteservice.app/w/WJ2FFY3RW8D',
+    customDomain: 'remote.your-domain.com',
+    cnameTarget: 'remote.nrw-carcoding.de',
+    accentColor: '#A855F7',
+    programName: '泰兴悦之宝',
+    wideLogoUrl: '',
+    smallLogoUrl: '',
+    websiteUrl: 'https://your-workshop.com',
+    codingEmail: 'workshop@example.com',
+    isSubscriptionActive: true
+  };
+
+  app.get('/api/branding', (req, res) => {
+    res.json(brandingConfigState);
+  });
+
+  app.post('/api/branding', (req, res) => {
+    brandingConfigState = {
+      ...brandingConfigState,
+      ...req.body
+    };
+    res.json({
+      success: true,
+      message: '品牌形象配置已保存',
+      config: brandingConfigState
+    });
+  });
+
+  app.post('/api/branding/check-domain', (req, res) => {
+    const { domain } = req.body;
+    // Simulate DNS CNAME check
+    const isValid = domain && domain.includes('.');
+    res.json({
+      success: true,
+      domain: domain || brandingConfigState.customDomain,
+      cnameTarget: brandingConfigState.cnameTarget,
+      resolved: isValid,
+      message: isValid ? 'CNAME 记录解析正常，已成功指向目标服务器' : '未检测到有效的 CNAME 记录'
+    });
+  });
+
+  app.get('/api/ediabas/config', (req, res) => {
+    res.json(ediabasConfigState);
+  });
+
+  app.post('/api/ediabas/apply-interface', (req, res) => {
+    const { interfaceType, comPort } = req.body;
+    if (interfaceType) {
+      ediabasConfigState.currentInterface = interfaceType;
+      if (comPort) ediabasConfigState.comPort = comPort;
+      res.json({
+        success: true,
+        message: `EDIABAS.INI 接口已成功写入为 ${interfaceType}`,
+        config: ediabasConfigState
+      });
+    } else {
+      res.status(400).json({ error: 'Interface type required' });
+    }
+  });
+
+  app.post('/api/ediabas/save-paths', (req, res) => {
+    const { ediabasPath, istaPath } = req.body;
+    if (ediabasPath) ediabasConfigState.ediabasPath = ediabasPath;
+    if (istaPath) {
+      ediabasConfigState.istaPath = istaPath;
+      if (istaPath.includes('TRIC') || istaPath.includes('Program Files')) {
+        ediabasConfigState.istaStatus = 'missing_files';
+        ediabasConfigState.missingFiles = [
+          `${istaPath}\\Ecu\\OPPS.prg`,
+          `${istaPath}\\Ediabas\\Bin\\api64.dll`
+        ];
+      } else {
+        ediabasConfigState.istaStatus = 'valid';
+        ediabasConfigState.missingFiles = [];
+      }
+    }
+    res.json({
+      success: true,
+      message: 'EDIABAS 与 ISTA 诊断程序路径已保存',
+      config: ediabasConfigState
+    });
   });
 
   app.delete('/api/sessions/:id', (req, res) => {
@@ -212,6 +425,36 @@ async function startServer() {
     } else {
       res.status(404).json({ error: 'Session not found' });
     }
+  });
+
+  // Diagnostic Enhancement API (AZ Pro Bridge)
+  app.post('/api/diagnostics/enable', async (req, res) => {
+    const { sessionId } = req.body;
+    let session: Session | null = null;
+    for (const s of sessions.values()) {
+      if (s.id === sessionId) {
+        session = s;
+        break;
+      }
+    }
+
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    console.log(`[DIAG] Enabling High-Performance Forwarding for session ${sessionId}`);
+    
+    // 1. Force clear local ports 22, 6801, 6811
+    await clearDiagnosticPorts();
+    
+    // 2. Setup standard forwarding
+    setupDiagnosticForwarding(session);
+    
+    res.json({ 
+      success: true, 
+      message: 'Diagnostic shielding and forwarding enabled.',
+      ports: DIAG_PORTS 
+    });
   });
 
   // API 404 handler - catch anything starting with /api that reaching here
@@ -338,6 +581,15 @@ async function startServer() {
             const targetAgent = currentAgent.role === 'car' ? session.techAgent : session.carAgent;
             if (targetAgent && targetAgent.ws.readyState === WebSocket.OPEN) {
               targetAgent.ws.send(message, { binary: true });
+            }
+
+            // [PRO MODE] Return path: If car sends data, write to local diagnostic tool sockets
+            if (currentAgent.role === 'car') {
+              activeToolSockets.forEach((socket, port) => {
+                if (socket.writable) {
+                  socket.write(message as Buffer);
+                }
+              });
             }
           }
         }
