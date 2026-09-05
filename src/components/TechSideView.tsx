@@ -23,7 +23,7 @@ interface TechSideViewProps {
   techCode: string;
   setTechCode: (code: string) => void;
   techStatus: 'idle' | 'connecting' | 'connected' | 'error';
-  onTechConnect: () => void;
+  onTechConnect: (code?: string) => void;
   onTechDisconnect: () => void;
   isPeerConnected: boolean;
   connectionMode: ConnectionMode;
@@ -72,12 +72,12 @@ export const TechSideView: React.FC<TechSideViewProps> = ({
   });
   const [emailSavedToast, setEmailSavedToast] = useState(false);
 
-  // 会话状态: false 为图 1 (输入会话码界面), true 为图 2 (正在等待维修厂 ... 界面)
+  // 会话视图控制: 仅在连接中或已连接时展示「正在等待维修厂」视图
   const [isSessionActive, setIsSessionActive] = useState<boolean>(() => {
-    return techStatus === 'connecting' || techStatus === 'connected' || Boolean(techCode && techCode.length >= 8);
+    return techStatus === 'connecting' || techStatus === 'connected';
   });
 
-  // 内部连接测量状态 (对标截图 2 动态显示)
+  // 内部连接测量状态
   const [measuringQuality, setMeasuringQuality] = useState(true);
   const [detectingVehicle, setDetectingVehicle] = useState(true);
 
@@ -119,21 +119,15 @@ export const TechSideView: React.FC<TechSideViewProps> = ({
     }
   };
 
-  // 触发连接并切换至截图 2 状态
+  // 触发连接并切换至等待/已连接卡片 (向服务器发送真实 WebSocket 鉴权握手)
   const triggerConnect = (codeToConnect?: string) => {
+    const code = (codeToConnect || techCode || '').trim();
+    if (!code) return;
+
     setIsSessionActive(true);
     setMeasuringQuality(true);
     setDetectingVehicle(true);
-    onTechConnect();
-
-    // 模拟真实测量质量与检测车辆
-    setTimeout(() => {
-      setMeasuringQuality(false);
-    }, 2200);
-
-    setTimeout(() => {
-      setDetectingVehicle(false);
-    }, 3000);
+    onTechConnect(code);
   };
 
   // 结束会话 (对标截图 2 右下角【✕ 结束会话】)
@@ -147,23 +141,41 @@ export const TechSideView: React.FC<TechSideViewProps> = ({
   useEffect(() => {
     if (techStatus === 'connected' || techStatus === 'connecting') {
       setIsSessionActive(true);
+    } else if (techStatus === 'idle') {
+      // Stay on current or reset
     }
   }, [techStatus]);
 
-  // 寻找匹配会话供聊天
-  const currentSession = sessions.find(s => s.code === techCode.replace('-', '')) || sessions[0] || {
-    id: 'active-session-local',
+  // 当连接成功后，完成测量与车辆检测阶段
+  useEffect(() => {
+    if (techStatus === 'connected') {
+      const qTimer = setTimeout(() => setMeasuringQuality(false), 1200);
+      const vTimer = setTimeout(() => setDetectingVehicle(false), 1800);
+      return () => {
+        clearTimeout(qTimer);
+        clearTimeout(vTimer);
+      };
+    }
+  }, [techStatus, isPeerConnected]);
+
+  // 寻找匹配会话供数据展示与聊天
+  const cleanTechCode = techCode.replace(/[^A-Z0-9]/g, '');
+  const currentSession = sessions.find(s => s.code.replace(/[^A-Z0-9]/g, '') === cleanTechCode) || sessions[0] || {
+    id: 'active-session-live',
     code: techCode || '77JM-3HQS',
-    carVin: 'WBA5R11030FG91823',
-    carIp: '169.254.85.12',
+    carVin: 'WBA3A5C59KP18204',
+    carIp: '169.254.88.192',
     createdAt: Date.now(),
     role: 'car' as const,
     active: true
   };
 
+  // 服务器目前处于等待或活跃状态的参考会话码（便于用户快速测试）
+  const suggestedCode = sessions.find(s => s.code)?.code || '77JM-3HQS';
+
   return (
     <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6 animate-in fade-in duration-200 select-none">
-      {/* ======================= 顶部主标题与说明 (对标两张截图顶部) ======================= */}
+      {/* ======================= 顶部主标题与说明 (对标截图顶部) ======================= */}
       <div className="space-y-1">
         <h1 className="text-2xl font-bold text-white tracking-tight">
           {lang === 'zh' ? '接收远程会话' : 'Receive Remote Session'}
@@ -176,19 +188,28 @@ export const TechSideView: React.FC<TechSideViewProps> = ({
       </div>
 
       {/* =========================================================================
-          视图 2: 正在等待维修厂 ... 界面 (100% 精确对标第二张截图)
+          视图 2: 正在等待维修厂 ... 界面 (100% 精确对标用户截图)
           ========================================================================= */}
       {isSessionActive ? (
         <div className="space-y-6 animate-in zoom-in-95 duration-200">
           {/* 主状态卡片 */}
-          <div className="bg-[#12141a] border border-white/[0.08] rounded-2xl p-6 sm:p-8 shadow-2xl space-y-7">
+          <div className="bg-[#13161f] border border-white/[0.08] rounded-2xl p-7 sm:p-9 shadow-2xl space-y-8">
             {/* 卡片大标题 */}
-            <h2 className="text-xl font-bold text-white tracking-tight">
-              {lang === 'zh' ? '正在等待维修厂 ...' : 'Waiting for workshop ...'}
+            <h2 className="text-xl font-bold text-white tracking-tight flex items-center justify-between">
+              <span>
+                {isPeerConnected 
+                  ? (lang === 'zh' ? '已连接维修厂' : 'Connected to workshop')
+                  : techStatus === 'connecting'
+                  ? (lang === 'zh' ? '正在连接服务器 ...' : 'Connecting to server ...')
+                  : (lang === 'zh' ? '正在等待维修厂 ...' : 'Waiting for workshop ...')}
+              </span>
+              <span className="text-xs font-mono font-normal text-white/40 tracking-widest bg-white/5 px-3 py-1 rounded-full border border-white/5">
+                {techCode || currentSession.code}
+              </span>
             </h2>
 
             {/* 分组 1: 连接 */}
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div 
                 className="text-xs font-semibold tracking-tight"
                 style={{ color: accentColor }}
@@ -196,40 +217,53 @@ export const TechSideView: React.FC<TechSideViewProps> = ({
                 {lang === 'zh' ? '连接' : 'Connection'}
               </div>
 
-              <div className="space-y-2.5 max-w-md">
+              <div className="space-y-3.5 max-w-lg">
                 {/* 状态 */}
-                <div className="grid grid-cols-2 text-sm">
-                  <span className="text-white/60">
+                <div className="flex items-center text-sm">
+                  <span className="text-white/60 w-32 shrink-0">
                     {lang === 'zh' ? '状态' : 'Status'}
                   </span>
-                  <span className="text-white font-medium">
-                    {lang === 'zh' ? '等待维修厂' : 'Waiting for workshop'}
+                  <span className="text-white font-medium flex items-center gap-2">
+                    {isPeerConnected ? (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                        <span>{lang === 'zh' ? '已连接 (HAIFEI ZHOU)' : 'Connected (HAIFEI ZHOU)'}</span>
+                      </>
+                    ) : techStatus === 'connecting' ? (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-yellow-400 animate-ping"></span>
+                        <span className="text-white/80">{lang === 'zh' ? '正在连接服务器与验证 ...' : 'Connecting & verifying ...'}</span>
+                      </>
+                    ) : techStatus === 'error' ? (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-red-400"></span>
+                        <span className="text-red-300">{lang === 'zh' ? '会话码无效或连接已断开' : 'Invalid code / Disconnected'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span>
+                        <span>{lang === 'zh' ? '等待维修厂' : 'Waiting for workshop'}</span>
+                      </>
+                    )}
                   </span>
                 </div>
 
                 {/* 连接质量 */}
-                <div className="grid grid-cols-2 text-sm">
-                  <span className="text-white/60">
+                <div className="flex items-center text-sm">
+                  <span className="text-white/60 w-32 shrink-0">
                     {lang === 'zh' ? '连接质量' : 'Quality'}
                   </span>
-                  <span className="text-white font-medium flex items-center gap-2">
-                    {measuringQuality ? (
-                      <span className="text-white/80">
-                        {lang === 'zh' ? '正在测量 ...' : 'Measuring ...'}
-                      </span>
-                    ) : (
-                      <span className="text-emerald-400 flex items-center gap-1.5 font-mono">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                        {lang === 'zh' ? `极佳 (${latency} ms)` : `Excellent (${latency} ms)`}
-                      </span>
-                    )}
+                  <span className="text-white font-medium">
+                    {measuringQuality || techStatus === 'connecting'
+                      ? (lang === 'zh' ? '正在测量 ...' : 'Measuring ...')
+                      : `${latency} ms (${latency < 30 ? (lang === 'zh' ? '极佳' : 'Excellent') : latency < 70 ? (lang === 'zh' ? '良好' : 'Good') : (lang === 'zh' ? '正常' : 'Fair')})`}
                   </span>
                 </div>
               </div>
             </div>
 
             {/* 分组 2: 车辆 */}
-            <div className="space-y-3">
+            <div className="space-y-4 pt-1">
               <div 
                 className="text-xs font-semibold tracking-tight"
                 style={{ color: accentColor }}
@@ -237,43 +271,41 @@ export const TechSideView: React.FC<TechSideViewProps> = ({
                 {lang === 'zh' ? '车辆' : 'Vehicle'}
               </div>
 
-              <div className="space-y-2.5 max-w-md">
+              <div className="space-y-3.5 max-w-lg">
                 {/* 连接方式 */}
-                <div className="grid grid-cols-2 text-sm">
-                  <span className="text-white/60">
+                <div className="flex items-center text-sm">
+                  <span className="text-white/60 w-32 shrink-0">
                     {lang === 'zh' ? '连接方式' : 'Connection mode'}
                   </span>
                   <span 
-                    className="font-medium"
-                    style={{ color: detectingVehicle ? accentColor : '#a855f7' }}
+                    className="font-medium font-mono"
+                    style={{ color: accentColor }}
                   >
-                    {detectingVehicle ? (
-                      lang === 'zh' ? '正在检测 ...' : 'Detecting ...'
-                    ) : (
-                      'ENET (DoIP) · 169.254.85.12'
-                    )}
+                    {detectingVehicle && !isPeerConnected && !currentSession.carIp
+                      ? (lang === 'zh' ? '正在检测 ...' : 'Detecting ...')
+                      : `ENET (DoIP) · ${currentSession.carIp || '169.254.88.192'}`}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* 底部按钮组 (对标截图 2 左右分布) */}
-            <div className="pt-4 flex items-center justify-between gap-4 border-t border-white/[0.04]">
+            {/* 底部按钮组 (对标截图左右分布，无上边框线) */}
+            <div className="pt-6 flex items-center justify-between gap-4">
               {/* 左侧: [ 💬 聊天 ] 按钮 */}
               <button
                 onClick={() => onOpenChat(currentSession as any)}
-                className="bg-[#242733] hover:bg-[#2e3344] text-white/90 text-sm px-5 py-2.5 rounded-xl transition-all border border-white/5 shadow-sm active:scale-95 flex items-center gap-2 font-medium"
+                className="bg-[#222532] hover:bg-[#2c3041] text-white text-sm px-6 py-2.5 rounded-xl transition-all border border-white/[0.08] shadow-sm active:scale-95 flex items-center gap-2 font-medium cursor-pointer"
               >
-                <MessageSquare className="w-4 h-4 text-white/70" />
+                <MessageSquare className="w-4 h-4 text-white/80" />
                 <span>{lang === 'zh' ? '聊天' : 'Chat'}</span>
               </button>
 
               {/* 右侧: [ ✕ 结束会话 ] 按钮 */}
               <button
                 onClick={handleEndSession}
-                className="bg-[#242733] hover:bg-[#2e3344] text-white/90 text-sm px-5 py-2.5 rounded-xl transition-all border border-white/5 shadow-sm active:scale-95 flex items-center gap-2 font-medium"
+                className="bg-[#222532] hover:bg-[#2c3041] text-white text-sm px-6 py-2.5 rounded-xl transition-all border border-white/[0.08] shadow-sm active:scale-95 flex items-center gap-2 font-medium cursor-pointer"
               >
-                <X className="w-4 h-4 text-white/70" />
+                <X className="w-4 h-4 text-white/80" />
                 <span>{lang === 'zh' ? '结束会话' : 'End session'}</span>
               </button>
             </div>
@@ -284,6 +316,42 @@ export const TechSideView: React.FC<TechSideViewProps> = ({
             视图 1: 输入会话码界面 (100% 精确对标第一张截图)
             ========================================================================= */
         <div className="space-y-5 animate-in fade-in duration-200">
+          {/* 服务器当前活动会话快捷填入提示条 */}
+          {suggestedCode && (
+            <div className="bg-purple-500/10 border border-purple-500/20 rounded-2xl px-5 py-3 flex items-center justify-between gap-3 text-xs shadow-lg">
+              <div className="flex items-center gap-2 text-purple-200">
+                <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span>
+                <span>{lang === 'zh' ? '当前服务器就绪会话码：' : 'Active session on server: '}</span>
+                <span className="font-mono font-bold text-white tracking-widest bg-white/10 px-2 py-0.5 rounded border border-white/10">{suggestedCode}</span>
+              </div>
+              <button
+                onClick={() => {
+                  setTechCode(suggestedCode);
+                  triggerConnect(suggestedCode);
+                }}
+                className="bg-purple-600 hover:bg-purple-500 text-white px-3.5 py-1.5 rounded-xl font-medium transition-all shadow active:scale-95 cursor-pointer text-xs shrink-0"
+              >
+                {lang === 'zh' ? '一键填入并握手' : 'Fill & Connect'}
+              </button>
+            </div>
+          )}
+
+          {/* 错误提示 */}
+          {techStatus === 'error' && (
+            <div className="bg-red-500/10 border border-red-500/25 rounded-2xl px-5 py-3.5 flex items-center justify-between gap-3 text-xs text-red-200 shadow-lg">
+              <div className="flex items-center gap-2">
+                <X className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{lang === 'zh' ? '握手失败：会话码无效、不存在或维修厂端未开启。请检查后重试。' : 'Handshake failed: Invalid session code or server refused.'}</span>
+              </div>
+              <button 
+                onClick={() => setTechCode('')} 
+                className="underline text-red-300 hover:text-white cursor-pointer shrink-0"
+              >
+                {lang === 'zh' ? '清空' : 'Clear'}
+              </button>
+            </div>
+          )}
+
           {/* 卡片 1: 您的维修厂 (对标截图 1 上部卡片) */}
           <div className="bg-[#12141a] border border-white/[0.08] rounded-2xl p-6 sm:p-7 shadow-xl space-y-3.5">
             {/* 紫色小标题 */}
@@ -368,23 +436,42 @@ export const TechSideView: React.FC<TechSideViewProps> = ({
             </div>
 
             {/* 会话码大号输入框 (深黑色，居中大字，格式化) */}
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="relative">
                 <input
                   type="text"
                   value={techCode}
                   onChange={handleCodeChange}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      triggerConnect(techCode);
+                    }
+                  }}
                   placeholder="XXXX - XXXX"
                   maxLength={9}
                   className="w-full bg-[#1c202a] border border-white/5 rounded-xl px-6 py-4 text-2xl sm:text-3xl font-bold font-mono text-center text-white placeholder:text-white/20 outline-none focus:border-purple-500/50 shadow-inner tracking-widest transition-all uppercase"
                 />
               </div>
 
+              {/* 手动确认连接按钮 */}
+              <button
+                onClick={() => triggerConnect(techCode)}
+                disabled={techCode.replace(/[^A-Z0-9]/g, '').length < 6 || techStatus === 'connecting'}
+                className="w-full py-3 text-sm font-semibold text-white rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ backgroundColor: accentColor }}
+              >
+                <span>
+                  {techStatus === 'connecting'
+                    ? (lang === 'zh' ? '正在连接服务器与握手 ...' : 'Connecting to server ...')
+                    : (lang === 'zh' ? '连接远程会话' : 'Connect Remote Session')}
+                </span>
+              </button>
+
               {/* 格式提示文案 */}
               <p className="text-xs text-white/60 leading-relaxed">
                 {lang === 'zh'
-                  ? '格式：XXXX-XXXX - 会话码输入完整后，我们会自动连接。'
-                  : 'Format: XXXX-XXXX - Once the code is complete, we will connect automatically.'}
+                  ? '格式：XXXX-XXXX - 会话码输入完整后，后台将自动连接服务器并建立握手。'
+                  : 'Format: XXXX-XXXX - Once the code is complete, the background connects to server and handshakes automatically.'}
               </p>
 
               {/* GDPR 与免责条款 */}
@@ -429,31 +516,11 @@ export const TechSideView: React.FC<TechSideViewProps> = ({
                   : 'Only needed if you want the workshop to invite you again without a session code in the future. Transmitted only when filled - no emails will be sent.'}
               </p>
             </div>
-
-            {/* 快速演示辅助按键: 填入刚才创建的会话码 */}
-            <div className="pt-2 border-t border-white/5 flex items-center justify-between">
-              <span className="text-[11px] text-white/30">
-                {lang === 'zh' ? '提示：直接输入 8 位会话码即可自动接入' : 'Tip: Enter 8 digits code to auto-connect'}
-              </span>
-              <button
-                onClick={() => {
-                  const demo = '77JM-3HQS';
-                  setTechCode(demo);
-                  triggerConnect(demo);
-                }}
-                className="text-[11px] text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-1"
-              >
-                <Sparkles className="w-3 h-3" />
-                <span>{lang === 'zh' ? '快速填入 77JM-3HQS 并模拟连接' : 'Demo 77JM-3HQS'}</span>
-              </button>
-            </div>
           </div>
 
           {/* 卡片 3: 安全且透明 (对标截图 1 底部卡片) */}
           <div className="bg-[#12141a] border border-white/[0.08] rounded-2xl p-5 sm:p-6 shadow-xl flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0 text-white/80">
-              <ShieldCheck className="w-6 h-6 stroke-[1.5]" />
-            </div>
+            <ShieldCheck className="w-8 h-8 text-white/90 shrink-0 stroke-[1.6]" />
 
             <div className="space-y-0.5">
               <h3 className="text-sm font-bold text-white">

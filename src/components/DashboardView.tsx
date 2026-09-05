@@ -27,7 +27,7 @@ interface DashboardViewProps {
   loading: boolean;
   onRefresh: () => void;
   onCreateSession: () => void;
-  onDeleteSession: (id: string, e: React.MouseEvent) => void;
+  onDeleteSession: (id: string, e?: React.MouseEvent) => void;
   onOpenChat: (session: Session) => void;
   activeDiagSessions: Set<string>;
   onEnableDiagMode: (sessionId: string) => void;
@@ -59,8 +59,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const t = translations[lang];
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const handleCopy = (code: string, id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleCopy = (code: string, id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation?.();
     navigator.clipboard.writeText(code);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);

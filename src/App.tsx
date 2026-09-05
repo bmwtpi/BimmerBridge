@@ -14,8 +14,8 @@ import {
   RustDeskConfig 
 } from './types';
 import { translations } from './lib/translations';
-import { NavigationHeader } from './components/NavigationHeader';
-import { TelemetryHUD } from './components/TelemetryHUD';
+import { HelpView } from './components/HelpView';
+import { AboutView } from './components/AboutView';
 import { DashboardView } from './components/DashboardView';
 import { CarSideView } from './components/CarSideView';
 import { ProvideSessionView } from './components/ProvideSessionView';
@@ -31,8 +31,7 @@ import { AccountView } from './components/AccountView';
 import { EmailAuthModal } from './components/EmailAuthModal';
 import { 
   ApiView, 
-  PartsRequestsView, 
-  HelpView 
+  PartsRequestsView 
 } from './components/ConnectOtherViews';
 import { ChatDrawer } from './components/ChatDrawer';
 import { LogConsoleModal } from './components/LogConsoleModal';
@@ -40,11 +39,30 @@ import { PreFlightModal } from './components/PreFlightModal';
 
 export const App: React.FC = () => {
   // Localization & Navigation
-  const [lang, setLang] = useState<LangType>('zh');
-  const [activeTab, setActiveTab] = useState<TabType>('connection-test');
+  const [lang, setLang] = useState<LangType>(() => {
+    return (localStorage.getItem('cfg_lang') as LangType) || 'zh';
+  });
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    return (localStorage.getItem('cfg_active_tab') as TabType) || 'downloads';
+  });
   const [provideViewMode, setProvideViewMode] = useState<'standard' | 'adapters'>('standard');
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    const saved = localStorage.getItem('cfg_sidebar_collapsed');
+    return saved === 'true'; // defaults to false (expanded, exactly matching screenshot)
+  });
   const t = translations[lang];
+
+  useEffect(() => {
+    localStorage.setItem('cfg_lang', lang);
+  }, [lang]);
+
+  useEffect(() => {
+    localStorage.setItem('cfg_active_tab', activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    localStorage.setItem('cfg_sidebar_collapsed', String(isSidebarCollapsed));
+  }, [isSidebarCollapsed]);
 
   // Branding State (Connect v3.26.0)
   const [programName, setProgramName] = useState<string>(() => localStorage.getItem('cfg_program_name') || '泰兴悦之宝');
@@ -208,6 +226,16 @@ export const App: React.FC = () => {
     localStorage.setItem('autoConnect', String(autoConnect));
   }, [autoConnect]);
 
+  // Desktop Window Frame Sizing: Fullscreen vs exact screenshot desktop window dimensions (1360x860)
+  const [isWindowMaximized, setIsWindowMaximized] = useState<boolean>(() => {
+    const saved = localStorage.getItem('cfg_window_maximized');
+    return saved !== null ? saved === 'true' : true;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('cfg_window_maximized', String(isWindowMaximized));
+  }, [isWindowMaximized]);
+
   // Server Health Probe
   const checkServerHealth = async (retries = 3): Promise<boolean> => {
     try {
@@ -364,10 +392,19 @@ export const App: React.FC = () => {
     if (isOfferer) {
       const dc = pc.createDataChannel('bimmerbridge-p2p');
       setupDataChannel(dc);
-      pc.createOffer().then(offer => {
-        pc.setLocalDescription(offer);
-        socket.send(JSON.stringify({ type: 'webrtc_offer', offer }));
-      });
+      pc.createOffer()
+        .then(offer => {
+          if (pc.signalingState === 'stable') {
+            return pc.setLocalDescription(offer).then(() => {
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'webrtc_offer', offer }));
+              }
+            });
+          }
+        })
+        .catch(err => {
+          console.warn('WebRTC offer creation error:', err);
+        });
     } else {
       pc.ondatachannel = (event) => {
         setupDataChannel(event.channel);
@@ -461,13 +498,27 @@ export const App: React.FC = () => {
           try {
             const data = JSON.parse(event.data);
             if (data.type === 'webrtc_offer') {
-              const pc = pcRef.current || setupP2P(ws, false);
-              pc.setRemoteDescription(new RTCSessionDescription(data.offer))
-                .then(() => pc.createAnswer())
-                .then(answer => pc.setLocalDescription(answer))
-                .then(() => ws.send(JSON.stringify({ type: 'webrtc_answer', answer: pc.localDescription })));
+              let pc = pcRef.current;
+              if (!pc || pc.connectionState === 'closed' || pc.signalingState !== 'stable') {
+                pc = setupP2P(ws, false);
+              }
+              if (pc && pc.signalingState === 'stable') {
+                pc.setRemoteDescription(new RTCSessionDescription(data.offer))
+                  .then(() => pc.createAnswer())
+                  .then(answer => pc.setLocalDescription(answer))
+                  .then(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                      ws.send(JSON.stringify({ type: 'webrtc_answer', answer: pc.localDescription }));
+                    }
+                  })
+                  .catch(err => {
+                    console.warn('WebRTC answer negotiation error:', err);
+                  });
+              }
             } else if (data.type === 'webrtc_candidate') {
-              pcRef.current?.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(() => {});
+              if (pcRef.current && pcRef.current.remoteDescription && data.candidate) {
+                pcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(() => {});
+              }
             } else {
               handleIncomingMessage(data, session.id);
             }
@@ -517,17 +568,21 @@ export const App: React.FC = () => {
     }, 1200);
   };
 
-  // Tech Client Actions
-  const handleTechConnect = () => {
-    if (!techCode.trim()) return;
+  // Tech Client Actions (接收远程会话连接并握手)
+  const handleTechConnect = (codeOverride?: string) => {
+    const rawCode = (codeOverride || techCode || '').trim();
+    if (!rawCode) return;
+    
     setTechStatus('connecting');
-    addLog(`Initiating connection to tunnel code: ${techCode}...`, 'info');
+    addLog(`Initiating connection to tunnel code: ${rawCode}...`, 'info');
 
-    let code = techCode.trim().toUpperCase();
+    let code = rawCode.toUpperCase();
     if (code.includes('#')) {
       const parts = code.split('#');
       code = parts[parts.length - 1];
     }
+    // Also update techCode state
+    setTechCode(rawCode);
 
     if (techWsRef.current) techWsRef.current.close();
     const ws = new WebSocket(`${WS_BASE}/bridge`);
@@ -536,15 +591,15 @@ export const App: React.FC = () => {
     const timeoutId = setTimeout(() => {
       if (ws.readyState !== WebSocket.OPEN) {
         setTechStatus('error');
-        addLog('Handshake timed out. Check code or firewall.', 'error');
+        addLog('Handshake timed out. Check code or server connection.', 'error');
         ws.close();
       }
-    }, 8000);
+    }, 10000);
 
     ws.onopen = () => {
       clearTimeout(timeoutId);
       ws.send(JSON.stringify({ type: 'auth', role: 'tech', code }));
-      addLog('Socket established. Authenticating...', 'info');
+      addLog('WebSocket established with server. Authenticating session code...', 'info');
     };
 
     ws.onmessage = (event) => {
@@ -552,13 +607,59 @@ export const App: React.FC = () => {
         const data = JSON.parse(event.data);
         if (data.type === 'auth_success') {
           setTechStatus('connected');
-          addLog('Expert node authenticated! Launching P2P WebRTC handshake...', 'success');
+          addLog('Expert node authenticated! Handshake with server established.', 'success');
+          
+          if (data.session) {
+            setSessions(prev => {
+              const exists = prev.some(s => s.id === data.session.id);
+              if (exists) {
+                return prev.map(s => s.id === data.session.id ? { ...s, ...data.session } : s);
+              }
+              return [...prev, data.session];
+            });
+            if (data.session.carConnected) {
+              setIsPeerConnected(true);
+            }
+          }
+
+          // Launch P2P WebRTC handshake
           setupP2P(ws, true);
           fetchSessions();
+        } else if (data.type === 'error') {
+          setTechStatus('error');
+          addLog(`Server rejected handshake: ${data.message}`, 'error');
+        } else if (data.type === 'peer_connected') {
+          setIsPeerConnected(true);
+          addLog(`Workshop/Vehicle peer connected! Remote bridge is ACTIVE.`, 'success');
+          if (data.carIp || data.carVin) {
+            setSessions(prev => prev.map(s => s.code === code ? {
+              ...s,
+              carIp: data.carIp || s.carIp,
+              carVin: data.carVin || s.carVin,
+              carConnected: true
+            } : s));
+          }
+        } else if (data.type === 'peer_disconnected') {
+          setIsPeerConnected(false);
+          addLog('Peer disconnected from tunnel.', 'info');
+        } else if (data.type === 'pong') {
+          if (data.t) {
+            const rtt = Math.max(2, Date.now() - data.t);
+            setLatency(rtt);
+          }
+        } else if (data.type === 'car_info') {
+          setSessions(prev => prev.map(s => s.code === code ? { ...s, carIp: data.ip, carVin: data.vin } : s));
         } else if (data.type === 'webrtc_answer') {
-          pcRef.current?.setRemoteDescription(new RTCSessionDescription(data.answer));
+          const pc = pcRef.current;
+          if (pc && pc.signalingState === 'have-local-offer') {
+            pc.setRemoteDescription(new RTCSessionDescription(data.answer)).catch(err => {
+              console.warn('WebRTC setRemoteDescription answer error:', err);
+            });
+          }
         } else if (data.type === 'webrtc_candidate') {
-          pcRef.current?.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(() => {});
+          if (pcRef.current && pcRef.current.remoteDescription && data.candidate) {
+            pcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(() => {});
+          }
         } else {
           handleIncomingMessage(data, data.sessionId);
         }
@@ -573,8 +674,20 @@ export const App: React.FC = () => {
     ws.onclose = () => {
       addLog('Tech socket closed.', 'info');
       setTechStatus('idle');
+      setIsPeerConnected(false);
     };
   };
+
+  // Keep-alive and latency measurement loop for connected Tech session
+  useEffect(() => {
+    if (techStatus !== 'connected') return;
+    const pingTimer = setInterval(() => {
+      if (techWsRef.current && techWsRef.current.readyState === WebSocket.OPEN) {
+        techWsRef.current.send(JSON.stringify({ type: 'ping', t: Date.now() }));
+      }
+    }, 3000);
+    return () => clearInterval(pingTimer);
+  }, [techStatus]);
 
   const handleTechDisconnect = () => {
     if (techWsRef.current) {
@@ -587,7 +700,7 @@ export const App: React.FC = () => {
     }
     setTechStatus('idle');
     setIsPeerConnected(false);
-    addLog('Expert disconnected from session.', 'info');
+    addLog('Disconnected from remote session.', 'info');
   };
 
   // Diagnostic Mode (ISTA/E-Sys Port Takeover)
@@ -619,8 +732,8 @@ export const App: React.FC = () => {
   };
 
   // Session Management
-  const handleDeleteSession = async (sessionId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDeleteSession = async (sessionId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation?.();
     try {
       await fetch(`${API_BASE}/api/sessions/${sessionId}`, {
         method: 'DELETE',
@@ -784,65 +897,47 @@ export const App: React.FC = () => {
   const currentChatSession = sessions.find(s => s.id === activeChatSession) || null;
 
   return (
-    <div className="h-screen bg-[#07080a] text-white flex flex-col font-sans selection:bg-purple-600/30 overflow-hidden">
-      {/* Native Desktop Window Header (泰兴悦之宝 Connect · v3.26.0) */}
-      <WindowHeader
-        programName={programName}
-        accentColor={accentColor}
-        connectionMode={connectionMode}
-        isServerReady={isServerReady}
-      />
-
-      {/* Main Body with Left Connect Sidebar and Right Content */}
-      <div className="flex-1 flex min-h-0 overflow-hidden">
-        {/* Connect Desktop Left Sidebar */}
-        <ConnectSidebar
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          lang={lang}
-          isCollapsed={isSidebarCollapsed}
-          setIsCollapsed={setIsSidebarCollapsed}
+    <div className={`h-screen w-screen bg-[#07080b] text-white flex flex-col font-sans selection:bg-purple-600/30 overflow-hidden ${
+      isWindowMaximized ? '' : 'p-2 sm:p-4 md:p-6 items-center justify-center'
+    }`}>
+      {/* Native Desktop Window Container: either full screen or authentic screenshot desktop window frame */}
+      <div className={`transition-all duration-200 ${
+        isWindowMaximized 
+          ? 'w-full h-full flex flex-col bg-[#0e1017]' 
+          : 'w-full max-w-[1360px] h-full max-h-[860px] rounded-xl border border-[#232838] shadow-2xl overflow-hidden flex flex-col bg-[#0e1017]'
+      }`}>
+        {/* Native Desktop Window Header (泰兴悦之宝 Connect · v3.26.0) */}
+        <WindowHeader
           programName={programName}
           accentColor={accentColor}
-          wideLogoUrl={wideLogoUrl}
-          smallLogoUrl={smallLogoUrl}
-          websiteUrl={websiteUrl}
+          connectionMode={connectionMode}
+          isServerReady={isServerReady}
+          isMaximized={isWindowMaximized}
+          onToggleMaximize={() => setIsWindowMaximized(!isWindowMaximized)}
         />
 
-        {/* Right Content Area */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#07080a]">
-          {/* Navigation Header */}
-          <NavigationHeader
+        {/* Main Body with Left Connect Sidebar and Right Content */}
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          {/* Connect Desktop Left Sidebar */}
+          <ConnectSidebar
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             lang={lang}
             setLang={setLang}
-            username={username}
-            isServerReady={isServerReady}
-            connectionMode={connectionMode}
-            onLogout={handleLogout}
             onOpenLogs={() => setIsLogsOpen(true)}
-            activeSessionCount={sessions.length}
+            isCollapsed={isSidebarCollapsed}
+            setIsCollapsed={setIsSidebarCollapsed}
             programName={programName}
             accentColor={accentColor}
+            wideLogoUrl={wideLogoUrl}
+            smallLogoUrl={smallLogoUrl}
+            websiteUrl={websiteUrl}
           />
 
-          {/* RemoteService.app Real-time Telemetry HUD (Always-on status strip) */}
-          <TelemetryHUD
-            lang={lang}
-            telemetry={telemetry}
-            connectionMode={connectionMode}
-            onNavigateTab={(tab) => setActiveTab(tab)}
-            onOpenPreFlight={() => setIsPreFlightOpen(true)}
-            onOpenChat={() => {
-              if (sessions.length > 0) handleOpenChat(sessions[0]);
-              else setIsChatOpen(true);
-            }}
-            activeSessionCode={sessions[0]?.code || latestCode}
-          />
-
-          {/* Main View Router */}
-          <main className="flex-1 overflow-y-auto custom-scrollbar pb-8">
+          {/* Right Content Area */}
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#0e1017]">
+            {/* Main View Router */}
+            <main className="flex-1 overflow-y-auto custom-scrollbar pb-8">
             {activeTab === 'branding' && (
               <BrandingView
                 lang={lang}
@@ -882,8 +977,21 @@ export const App: React.FC = () => {
               <PartsRequestsView lang={lang} />
             )}
 
-            {(activeTab === 'help' || activeTab === 'support' || activeTab === 'about') && (
-              <HelpView lang={lang} programName={programName} />
+            {(activeTab === 'help' || activeTab === 'support') && (
+              <HelpView 
+                lang={lang} 
+                accentColor={accentColor}
+                supportEmail="bmwtpi@gmail.com"
+              />
+            )}
+
+            {activeTab === 'about' && (
+              <AboutView
+                lang={lang}
+                programName={programName}
+                accentColor={accentColor}
+                supportEmail="bmwtpi@gmail.com"
+              />
             )}
 
             {activeTab === 'dashboard' && (
@@ -1029,6 +1137,7 @@ export const App: React.FC = () => {
             )}
           </main>
         </div>
+      </div>
       </div>
 
       {/* 5-Step Pre-Flight Verification Modal (RemoteService.app style) */}

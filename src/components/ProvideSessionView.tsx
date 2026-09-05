@@ -66,7 +66,7 @@ interface ProvideSessionViewProps {
   lang: LangType;
   sessions: Session[];
   onCreateSession: (customCode?: string, email?: string) => Promise<string | undefined>;
-  onDeleteSession: (id: string) => void;
+  onDeleteSession: (id: string, e?: React.MouseEvent) => void;
   onOpenChat?: (session: Session) => void;
   onSwitchToTech?: () => void;
   connectionMode?: ConnectionMode;
@@ -91,7 +91,7 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
   // 创建新会话表单输入 (远程编码)
   const [customerEmail, setCustomerEmail] = useState<string>('');
   const [isCreating, setIsCreating] = useState<boolean>(false);
-  // 远程编码创建成功后的会话状态 (默认 null 展现第一张图，点击创建后展现第二张图)
+  // 远程编码创建成功后的会话状态 (点击「创建新会话」后进入)
   const [activeCodingSession, setActiveCodingSession] = useState<{
     code: string;
     email?: string;
@@ -100,8 +100,22 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
   const [copiedCodingLink, setCopiedCodingLink] = useState<boolean>(false);
   const [showCreatedToast, setShowCreatedToast] = useState<boolean>(false);
 
-  // 预留中继服务器对接状态 (对标截图 2: 已找到最佳服务器 德国)
+  // 运行流程当前进行步骤 (1: 客户已打开会话码, 2: 正在下载连接模块, 3: 正在选择最佳服务器, 4: 正在建立安全隧道, 5: 隧道已就绪/车辆已连接)
+  const [flowStep, setFlowStep] = useState<number>(1);
+
+  // 预留中继服务器对接状态 (对标截图: 默认已找到最佳服务器 美国 🇺🇸)
   const [relayServers, setRelayServers] = useState<RelayServerConfig[]>([
+    {
+      id: 'us-east',
+      name: '美国东部专线节点 (US East VA-01)',
+      countryName: '美国',
+      flagType: 'us',
+      endpoint: 'wss://us.remoteservice.app/mesh',
+      port: 8443,
+      protocol: 'WSS',
+      pingMs: 24,
+      status: 'optimal'
+    },
     {
       id: 'de-frankfurt',
       name: '德国法兰克福核心节点 (Frankfurt Core DE-01)',
@@ -111,7 +125,7 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
       port: 8443,
       protocol: 'WSS',
       pingMs: 32,
-      status: 'optimal'
+      status: 'connected'
     },
     {
       id: 'cn-beijing',
@@ -145,20 +159,9 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
       protocol: 'WSS',
       pingMs: 65,
       status: 'standby'
-    },
-    {
-      id: 'us-east',
-      name: '美国东部专线节点 (US East VA-01)',
-      countryName: '美国',
-      flagType: 'us',
-      endpoint: 'wss://us.remoteservice.app/mesh',
-      port: 8443,
-      protocol: 'WSS',
-      pingMs: 142,
-      status: 'standby'
     }
   ]);
-  const [selectedRelayServerId, setSelectedRelayServerId] = useState<string>('de-frankfurt');
+  const [selectedRelayServerId, setSelectedRelayServerId] = useState<string>('us-east');
   const [showServerConfigModal, setShowServerConfigModal] = useState<boolean>(false);
   const [isServerConnecting, setIsServerConnecting] = useState<boolean>(false);
   const [serverConnectionAlive, setServerConnectionAlive] = useState<boolean>(true);
@@ -182,11 +185,11 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
   const [isRcConnected, setIsRcConnected] = useState<boolean>(false);
   const [showRcDesktopModal, setShowRcDesktopModal] = useState<boolean>(false);
 
-  // 折叠卡片状态 (按截图 1：过往会话和计划中默认收起，保持视觉精简整洁)
-  const [isPastSessionsOpen, setIsPastSessionsOpen] = useState<boolean>(false);
+  // 折叠卡片状态 (对标截图：过往会话默认展开，计划中默认收起)
+  const [isPastSessionsOpen, setIsPastSessionsOpen] = useState<boolean>(true);
   const [isScheduledSessionsOpen, setIsScheduledSessionsOpen] = useState<boolean>(false);
 
-  // 过往会话客户列表 (默认展示截图中的 LAPTOP-1KVSHUQ1)
+  // 过往会话客户列表 (默认展示截图中的 LAPTOP-1KVSHUQ1，6 次会话，2026-09-05 21:26)
   const [pastClients, setPastClients] = useState<PastClient[]>(() => {
     const saved = localStorage.getItem('cfg_past_clients');
     if (saved) {
@@ -199,8 +202,8 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
         countryFlag: '🇺🇸',
         online: true,
         hasSavedEmail: true,
-        sessionCount: 2,
-        lastSessionTime: '04.09.2026 10:08',
+        sessionCount: 6,
+        lastSessionTime: '05.09.2026 21:26',
         email: 'client@workshop-remote.com'
       }
     ];
@@ -226,35 +229,46 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
     return `${p1}-${p2}`;
   };
 
-  // 处理创建远程编码新会话 (点击后进入截图 2 状态)
+  // 处理创建远程编码新会话 (调用真实后台在服务器生成连接码，并启动 WebSocket 连接)
   const handleCreateNewSession = async () => {
     setIsCreating(true);
     setIsServerConnecting(true);
+    setFlowStep(1);
     try {
-      // 模拟与服务器建立并注册会话
       const newCode = await onCreateSession(undefined, customerEmail.trim() || undefined);
-      // 优先采用 77JM-3HQS 或随机生成的大号会话码
-      const code = newCode || (Math.random() > 0.5 ? '77JM-3HQS' : generateCodingSessionCode());
+      const code = newCode || generateCodingSessionCode();
       setActiveCodingSession({
         code,
         email: customerEmail.trim() || undefined
       });
       setServerConnectionAlive(true);
       setShowCreatedToast(true);
+
+      // 真实流程渐进模拟：让建立连接各阶段自然推进
+      setTimeout(() => setFlowStep(prev => prev < 2 ? 2 : prev), 1500);
+      setTimeout(() => setFlowStep(prev => prev < 3 ? 3 : prev), 3000);
+      setTimeout(() => setFlowStep(prev => prev < 4 ? 4 : prev), 5000);
     } catch (e) {
-      console.error(e);
+      console.error('Failed to create session on server:', e);
     } finally {
       setIsCreating(false);
       setIsServerConnecting(false);
     }
   };
 
-  // 放弃当前会话 (对标截图 2 最左下角【放弃】按钮，回到第一张图状态)
+  // 放弃当前会话 (对标截图 2 最左下角【放弃】按钮，回到第一张图状态并释放后台会话)
   const handleCancelCodingSession = () => {
+    if (activeCodingSession) {
+      const existing = sessions.find(s => s.code === activeCodingSession.code);
+      if (existing) {
+        onDeleteSession(existing.id);
+      }
+    }
     setActiveCodingSession(null);
     setShowCreatedToast(false);
     setCopiedCodingCode(false);
     setCopiedCodingLink(false);
+    setFlowStep(1);
   };
 
   // 测试自定义服务器连通性 (Ping Test)
@@ -266,10 +280,36 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
     }, 600);
   };
 
+  // 安全剪贴板复制工具，兼容 iframe 与安全上下文
+  const safeClipboardCopy = (text: string) => {
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).catch(() => {
+        fallbackCopyText(text);
+      });
+    } else {
+      fallbackCopyText(text);
+    }
+  };
+
+  const fallbackCopyText = (text: string) => {
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    } catch (e) {
+      console.warn('Fallback copy failed:', e);
+    }
+  };
+
   // 复制远程编码会话码 (对标截图 3)
   const handleCopyCodingCode = () => {
     if (!activeCodingSession) return;
-    navigator.clipboard.writeText(activeCodingSession.code);
+    safeClipboardCopy(activeCodingSession.code);
     setCopiedCodingCode(true);
     setTimeout(() => setCopiedCodingCode(false), 2000);
   };
@@ -278,9 +318,18 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
   const handleCopyCodingLink = () => {
     if (!activeCodingSession) return;
     const link = `https://remoteservice.app/s/${activeCodingSession.code}`;
-    navigator.clipboard.writeText(link);
+    safeClipboardCopy(link);
     setCopiedCodingLink(true);
     setTimeout(() => setCopiedCodingLink(false), 2000);
+  };
+
+  // 模拟客户接入以验证运行流程推进
+  const handleSimulateClientJoin = () => {
+    if (flowStep < 5) {
+      setFlowStep(5);
+    } else {
+      setFlowStep(3);
+    }
   };
 
   // 生成新的远程控制会话码
@@ -293,7 +342,7 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
 
   // 复制远程控制会话码
   const handleCopyRcCode = () => {
-    navigator.clipboard.writeText(remoteControlCode);
+    safeClipboardCopy(remoteControlCode);
     setCopiedRcCode(true);
     setTimeout(() => setCopiedRcCode(false), 2000);
   };
@@ -301,7 +350,7 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
   // 复制远程控制客户链接
   const handleCopyRcLink = () => {
     const link = `https://remoteservice.app/s/${remoteControlCode}`;
-    navigator.clipboard.writeText(link);
+    safeClipboardCopy(link);
     setCopiedRcLink(true);
     setTimeout(() => setCopiedRcLink(false), 2000);
   };
@@ -343,16 +392,16 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
   };
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6 animate-in fade-in duration-300 select-none">
-      {/* 顶部 Tab 切换胶囊 (精准对标截图 1 和截图 2: 远程编码 / 远程控制) */}
+    <div className="w-full max-w-6xl px-8 sm:px-10 py-7 space-y-6 animate-in fade-in duration-300 select-none">
+      {/* 顶部 Tab 切换胶囊 (精准对标截图: 远程编码 / 远程控制) */}
       <div className="flex items-center gap-3">
         {/* 远程编码 Tab */}
         <button
           onClick={() => setSessionSubTab('coding')}
-          className={`flex items-center justify-center gap-2.5 px-6 py-2.5 rounded-xl font-bold text-sm transition-all shadow-md ${
+          className={`flex items-center justify-center gap-2.5 px-7 py-2.5 rounded-lg font-medium text-sm transition-all shadow-sm ${
             sessionSubTab === 'coding'
-              ? 'bg-[#a855f7] text-white shadow-purple-600/30'
-              : 'bg-[#181b22] text-white/60 hover:text-white hover:bg-[#20232d]'
+              ? 'bg-[#9333ea] text-white shadow-purple-600/30'
+              : 'bg-[#181c26] text-[#9ca3af] hover:text-white border border-[#252c3c]'
           }`}
           style={sessionSubTab === 'coding' ? { backgroundColor: accentColor } : undefined}
         >
@@ -363,10 +412,10 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
         {/* 远程控制 Tab */}
         <button
           onClick={() => setSessionSubTab('control')}
-          className={`flex items-center justify-center gap-2.5 px-6 py-2.5 rounded-xl font-bold text-sm transition-all shadow-md ${
+          className={`flex items-center justify-center gap-2.5 px-7 py-2.5 rounded-lg font-medium text-sm transition-all shadow-sm ${
             sessionSubTab === 'control'
-              ? 'bg-[#a855f7] text-white shadow-purple-600/30'
-              : 'bg-[#181b22] text-white/60 hover:text-white hover:bg-[#20232d]'
+              ? 'bg-[#9333ea] text-white shadow-purple-600/30'
+              : 'bg-[#181c26] text-[#9ca3af] hover:text-white border border-[#252c3c]'
           }`}
           style={sessionSubTab === 'control' ? { backgroundColor: accentColor } : undefined}
         >
@@ -375,200 +424,383 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
         </button>
       </div>
 
-      {/* ===================== 视图 A: 远程编码 (对标截图 1) ===================== */}
+      {/* ===================== 视图 A: 远程编码 (对标截图) ===================== */}
       {sessionSubTab === 'coding' && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* 标题与描述 */}
-          <div className="space-y-1">
+          <div className="space-y-1 mt-1 mb-2">
             <h1 className="text-2xl font-bold text-white tracking-tight">
               {lang === 'zh' ? '远程编码' : 'Remote Coding'}
             </h1>
-            <p className="text-sm text-white/50">
+            <p className="text-sm text-[#9ca3af]">
               {lang === 'zh'
                 ? '创建会话码，为客户提供远程编码会话。'
                 : 'Create session code to provide remote coding sessions to customers.'}
             </p>
           </div>
 
-          {/* ======================= 状态 1: 会话已创建视图 (100% 精准对标截图 2) ======================= */}
+          {/* ======================= 状态 1: 会话创建流程与卡片视图 (完整运行逻辑：会话码实时展示 + 建立连接流程) ======================= */}
           {activeCodingSession ? (
             <div className="space-y-6 animate-in fade-in duration-200">
-              {/* 卡片 1: 正在创建会话 ... (对标截图 2 上部卡片) */}
-              <div className="bg-[#12141a] border border-white/[0.08] rounded-2xl p-6 sm:p-7 shadow-xl flex items-center gap-3.5">
-                <div 
-                  className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin shrink-0"
-                  style={{ borderColor: `${accentColor} transparent ${accentColor} ${accentColor}` }}
-                />
-                <span className="text-sm text-white/90 font-medium">
-                  {lang === 'zh' ? '正在创建会话 ...' : 'Creating session ...'}
-                </span>
+              {/* 卡片 1: 正在创建会话 ... (精准对标截图顶部卡片) */}
+              <div className="bg-[#12141a] border border-white/[0.08] rounded-2xl p-6 sm:p-7 shadow-xl flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  {flowStep < 5 ? (
+                    <div 
+                      className="w-6 h-6 border-[2.5px] border-purple-500 border-t-transparent rounded-full animate-spin shrink-0"
+                      style={{ borderColor: `${accentColor} transparent ${accentColor} ${accentColor}` }}
+                    />
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500 flex items-center justify-center text-emerald-400 shrink-0">
+                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                    </div>
+                  )}
+                  <span className="text-base text-white/90 font-medium">
+                    {flowStep < 5
+                      ? (lang === 'zh' ? '正在创建会话 ...' : 'Creating session ...')
+                      : (lang === 'zh' ? '会话已就绪 · 安全通道已建立' : 'Session Ready · Secure Tunnel Active')}
+                  </span>
+                </div>
+
+                {/* 顶部会话码徽章速览 (确保持续可见) */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-white/40 hidden sm:inline">
+                    {lang === 'zh' ? '当前会话码:' : 'Current Code:'}
+                  </span>
+                  <div className="flex items-center gap-1.5 bg-[#1a1d26] border border-white/10 px-3 py-1.5 rounded-xl">
+                    <span 
+                      className="font-mono font-bold text-sm tracking-wider"
+                      style={{ color: accentColor }}
+                    >
+                      {activeCodingSession.code}
+                    </span>
+                    <button
+                      onClick={handleCopyCodingCode}
+                      className="text-white/60 hover:text-white p-0.5 rounded transition-colors"
+                      title={lang === 'zh' ? '复制会话码' : 'Copy code'}
+                    >
+                      {copiedCodingCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              {/* 卡片 2: 会话码与客户链接主卡片 (对标截图 2 中部卡片) */}
-              <div className="bg-[#12141a] border border-white/[0.08] rounded-2xl p-6 sm:p-7 shadow-xl space-y-4">
-                {/* 紫色小标题 */}
-                <div 
-                  className="text-xs font-semibold tracking-tight"
-                  style={{ color: accentColor }}
-                >
-                  {lang === 'zh' ? '会话码' : 'Session code'}
-                </div>
-
-                {/* 会话码展示框与复制按钮 */}
-                <div className="flex items-center gap-2.5">
-                  <div className="bg-[#1c202a] border border-white/5 rounded-xl px-5 py-2.5 text-2xl font-bold font-mono text-white tracking-wider select-all shadow-inner">
-                    {activeCodingSession.code}
-                  </div>
-                  <button
-                    onClick={handleCopyCodingCode}
-                    className="bg-[#1c202a] border border-white/5 hover:bg-[#252936] text-white text-xs font-medium px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all shadow-sm active:scale-95 shrink-0"
+              {/* 卡片 2: 会话码与客户链接 + 正在建立连接运行流程主卡片 (完全融合运行逻辑与截图界面) */}
+              <div className="bg-[#12141a] border border-white/[0.08] rounded-2xl p-6 sm:p-8 shadow-xl space-y-6">
+                {/* 区域 A: 会话码与客户链接 (100% 完整清晰展示，绝不隐藏) */}
+                <div className="space-y-4">
+                  {/* 会话码标题 */}
+                  <div 
+                    className="text-xs font-semibold tracking-tight uppercase"
+                    style={{ color: accentColor }}
                   >
-                    {copiedCodingCode ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5 text-white/80" />
-                    )}
-                    <span>{copiedCodingCode ? (lang === 'zh' ? '已复制' : 'Copied') : (lang === 'zh' ? '复制' : 'Copy')}</span>
-                  </button>
-                </div>
+                    {lang === 'zh' ? '会话码' : 'Session code'}
+                  </div>
 
-                {/* 段落说明 1 */}
-                <p className="text-xs text-white/60 leading-relaxed pt-0.5">
-                  {lang === 'zh'
-                    ? '将此会话码告知客户 - 客户在其程序的「远程编码」下输入。然后启动主控连接；双方必须在 2 分钟内完成连接。'
-                    : 'Provide this session code to the customer - customer enters it in "Remote Coding". Then start master connection; both parties must connect within 2 minutes.'}
-                </p>
-
-                {/* 客户链接 */}
-                <div className="space-y-1.5 pt-2">
-                  <label className="text-xs text-white/60 font-normal block">
-                    {lang === 'zh' ? '客户链接' : 'Customer link'}
-                  </label>
+                  {/* 会话码大号文本框与复制按钮 */}
                   <div className="flex items-center gap-2.5">
-                    <div className="bg-[#1c202a] border border-white/5 rounded-xl px-4 py-2.5 text-xs font-mono text-white/80 truncate flex-1 max-w-xl select-all shadow-inner">
-                      https://remoteservice.app/s/{activeCodingSession.code}
+                    <div className="bg-[#1c202a] border border-white/10 rounded-xl px-5 py-2.5 text-2xl font-bold font-mono text-white tracking-wider select-all shadow-inner">
+                      {activeCodingSession.code}
                     </div>
                     <button
-                      onClick={handleCopyCodingLink}
-                      className="bg-[#1c202a] border border-white/5 hover:bg-[#252936] text-white text-xs font-medium px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all shadow-sm active:scale-95 shrink-0"
+                      onClick={handleCopyCodingCode}
+                      className="bg-[#1c202a] border border-white/10 hover:bg-[#252936] text-white text-xs font-medium px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all shadow-sm active:scale-95 shrink-0 cursor-pointer"
                     >
-                      {copiedCodingLink ? (
+                      {copiedCodingCode ? (
                         <Check className="w-3.5 h-3.5 text-emerald-400" />
                       ) : (
                         <Copy className="w-3.5 h-3.5 text-white/80" />
                       )}
-                      <span>{copiedCodingLink ? (lang === 'zh' ? '已复制' : 'Copied') : (lang === 'zh' ? '复制链接' : 'Copy link')}</span>
+                      <span>{copiedCodingCode ? (lang === 'zh' ? '已复制' : 'Copied') : (lang === 'zh' ? '复制' : 'Copy')}</span>
                     </button>
                   </div>
-                </div>
 
-                {/* 段落说明 2 */}
-                <p className="text-xs text-white/50 leading-relaxed">
-                  {lang === 'zh'
-                    ? '一个链接搞定一切：首次使用者通过它下载内置会话码的程序，回头客则直接打开已安装的程序。'
-                    : 'One link for everything: First-time users download the app with embedded code, returning customers open the installed app directly.'}
-                </p>
+                  {/* 告知客户说明文案 */}
+                  <p className="text-xs text-white/60 leading-relaxed pt-0.5">
+                    {lang === 'zh'
+                      ? '将此会话码告知客户 - 客户在其程序的「远程编码」下输入。然后启动主控连接；双方必须在 2 分钟内完成连接。'
+                      : 'Provide this session code to the customer - customer enters it in "Remote Coding". Then start master connection; both parties must connect within 2 minutes.'}
+                  </p>
 
-                {/* 对标截图 2: 正在等待客户 ... 与 已找到最佳服务器 德国 */}
-                <div className="pt-3 pb-1 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-white/[0.04]">
-                  {/* 左侧：正在等待客户 ... (紫色缺口旋转圆环) */}
-                  <div className="flex items-center gap-3.5">
-                    <div 
-                      className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin shrink-0"
-                      style={{ borderColor: `${accentColor} transparent ${accentColor} ${accentColor}` }}
-                    />
-                    <div className="space-y-0.5">
-                      <div className="text-sm font-bold text-white leading-tight">
-                        {lang === 'zh' ? '正在等待客户 ...' : 'Waiting for customer ...'}
+                  {/* 客户专属直达链接 */}
+                  <div className="space-y-1.5 pt-2">
+                    <label className="text-xs text-white/60 font-normal block">
+                      {lang === 'zh' ? '客户链接' : 'Customer link'}
+                    </label>
+                    <div className="flex items-center gap-2.5">
+                      <div className="bg-[#1c202a] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono text-white/80 truncate flex-1 max-w-xl select-all shadow-inner">
+                        https://remoteservice.app/s/{activeCodingSession.code}
                       </div>
-                      <div className="text-xs text-white/50 leading-tight">
-                        {lang === 'zh'
-                          ? '客户通过您的链接进行连接。最多等待 10 分钟。'
-                          : 'Customer connects via your link. Waiting up to 10 minutes.'}
-                      </div>
+                      <button
+                        onClick={handleCopyCodingLink}
+                        className="bg-[#1c202a] border border-white/10 hover:bg-[#252936] text-white text-xs font-medium px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all shadow-sm active:scale-95 shrink-0 cursor-pointer"
+                      >
+                        {copiedCodingLink ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5 text-white/80" />
+                        )}
+                        <span>{copiedCodingLink ? (lang === 'zh' ? '已复制' : 'Copied') : (lang === 'zh' ? '复制链接' : 'Copy link')}</span>
+                      </button>
                     </div>
                   </div>
 
-                  {/* 右侧：已找到最佳服务器 德国 (对标截图 2 紫色发光边框小卡片，支持点击配置) */}
-                  <button
-                    onClick={() => setShowServerConfigModal(true)}
-                    className="bg-[#161822] border border-[#a855f7]/60 hover:border-[#a855f7] rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-[0_0_15px_rgba(168,85,247,0.18)] transition-all shrink-0 group self-start sm:self-auto text-left active:scale-95"
-                    title={lang === 'zh' ? '点击配置与对接中继服务器' : 'Configure Relay Server'}
-                  >
-                    {/* 国旗：德国国旗 (高保真黑红黄三色旗) 或对应选中的服务器国旗 */}
-                    {selectedRelayServer.flagType === 'de' ? (
-                      <div className="w-6 h-4 rounded-[2px] overflow-hidden flex flex-col shadow-sm shrink-0 border border-white/15">
-                        <div className="w-full h-1/3 bg-black"></div>
-                        <div className="w-full h-1/3 bg-[#DD0000]"></div>
-                        <div className="w-full h-1/3 bg-[#FFCC00]"></div>
-                      </div>
-                    ) : selectedRelayServer.flagType === 'cn' ? (
-                      <div className="w-6 h-4 rounded-[2px] overflow-hidden bg-[#de2910] flex items-center justify-center shadow-sm shrink-0 border border-white/15 text-[9px] text-[#ffde00] font-bold">
-                        ★
-                      </div>
-                    ) : selectedRelayServer.flagType === 'hk' ? (
-                      <div className="w-6 h-4 rounded-[2px] overflow-hidden bg-[#de2910] flex items-center justify-center shadow-sm shrink-0 border border-white/15 text-[8px] text-white">
-                        🇭🇰
-                      </div>
-                    ) : (
-                      <div className="w-6 h-4 rounded-[2px] overflow-hidden bg-purple-900/60 flex items-center justify-center shadow-sm shrink-0 border border-white/15 text-purple-300">
-                        <Server className="w-3 h-3" />
-                      </div>
-                    )}
-
-                    <div className="space-y-0.5">
-                      <div className="text-[13px] font-bold text-white group-hover:text-purple-300 transition-colors leading-tight">
-                        {lang === 'zh' ? '已找到最佳服务器' : 'Optimal server found'}
-                      </div>
-                      <div className="text-[11px] text-white/60 leading-tight">
-                        {selectedRelayServer.countryName}
-                      </div>
-                    </div>
-                  </button>
+                  <p className="text-xs text-white/50 leading-relaxed">
+                    {lang === 'zh'
+                      ? '一个链接搞定一切：首次使用者通过它下载内置会话码的程序，回头客则直接打开已安装的程序。'
+                      : 'One link for everything: First-time users download the app with embedded code, returning customers open the installed app directly.'}
+                  </p>
                 </div>
 
-                {/* 对标截图 2: 最下方【放弃】按钮 */}
-                <div className="pt-2 flex items-center justify-between">
-                  <button
-                    onClick={handleCancelCodingSession}
-                    className="bg-[#242733] hover:bg-[#2e3344] text-white/90 text-xs px-5 py-2 rounded-lg transition-colors border border-white/5 shadow-sm active:scale-95 font-medium"
-                  >
-                    {lang === 'zh' ? '放弃' : 'Cancel'}
-                  </button>
+                {/* 分割线 */}
+                <div className="border-t border-white/[0.08] pt-2" />
 
-                  <div className="flex items-center gap-3">
+                {/* 区域 B: 正在建立连接与 4 步状态机流程 (100% 对标用户截图) */}
+                <div className="space-y-6">
+                  {/* 顶部标题区：正在建立连接 ... 与 右侧已找到最佳服务器 美国 */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      {flowStep < 5 ? (
+                        <div 
+                          className="w-6 h-6 border-[2.5px] border-purple-500 border-t-transparent rounded-full animate-spin shrink-0"
+                          style={{ borderColor: `${accentColor} transparent ${accentColor} ${accentColor}` }}
+                        />
+                      ) : (
+                        <div className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500 flex items-center justify-center text-emerald-400 shrink-0">
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        </div>
+                      )}
+                      <div className="space-y-0.5">
+                        <div className="text-lg font-bold text-white leading-tight">
+                          {flowStep < 5
+                            ? (lang === 'zh' ? '正在建立连接 ...' : 'Establishing connection ...')
+                            : (lang === 'zh' ? '已连接客户车辆 · 诊断安全隧道就绪' : 'Connected to Vehicle · Tunnel Ready')}
+                        </div>
+                        <div className="text-xs text-white/50 leading-tight">
+                          {flowStep === 1
+                            ? (lang === 'zh' ? '等待客户打开会话码' : 'Waiting for client to open session code')
+                            : flowStep === 2
+                            ? (lang === 'zh' ? '正在下载连接模块' : 'Downloading connection module')
+                            : flowStep === 3
+                            ? (lang === 'zh' ? '正在选择最佳服务器' : 'Selecting optimal server')
+                            : flowStep === 4
+                            ? (lang === 'zh' ? '正在建立安全隧道' : 'Establishing secure tunnel')
+                            : (lang === 'zh' ? 'ENET DoIP 诊断通道激活 · 双向低延迟直连' : 'ENET DoIP Diagnostic Tunnel Active')}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 右侧：已找到最佳服务器 (紫色发光边框，与截图完全一致) */}
                     <button
                       onClick={() => setShowServerConfigModal(true)}
-                      className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1.5 transition-colors"
+                      className="border border-purple-500/80 bg-[#161824] rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-[0_0_16px_rgba(168,85,247,0.25)] transition-all shrink-0 hover:border-purple-400 group cursor-pointer active:scale-95 text-left self-start sm:self-auto"
+                      title={lang === 'zh' ? '点击配置或切换中继节点' : 'Relay server configuration'}
                     >
-                      <Settings className="w-3.5 h-3.5" />
-                      <span>{lang === 'zh' ? '服务器对接配置' : 'Relay Server Setup'}</span>
+                      {selectedRelayServer.flagType === 'us' ? (
+                        <span className="text-2xl leading-none">🇺🇸</span>
+                      ) : selectedRelayServer.flagType === 'de' ? (
+                        <div className="w-6 h-4 rounded-[2px] overflow-hidden flex flex-col shadow-sm shrink-0 border border-white/15">
+                          <div className="w-full h-1/3 bg-black"></div>
+                          <div className="w-full h-1/3 bg-[#DD0000]"></div>
+                          <div className="w-full h-1/3 bg-[#FFCC00]"></div>
+                        </div>
+                      ) : selectedRelayServer.flagType === 'cn' ? (
+                        <div className="w-6 h-4 rounded-[2px] overflow-hidden bg-[#de2910] flex items-center justify-center shadow-sm shrink-0 border border-white/15 text-[9px] text-[#ffde00] font-bold">
+                          ★
+                        </div>
+                      ) : (
+                        <span className="text-2xl leading-none">🌐</span>
+                      )}
+
+                      <div className="space-y-0.5">
+                        <div className="text-[13px] font-bold text-white group-hover:text-purple-300 transition-colors leading-tight">
+                          {lang === 'zh' ? '已找到最佳服务器' : 'Optimal server found'}
+                        </div>
+                        <div className="text-[11px] text-white/60 leading-tight">
+                          {selectedRelayServer.countryName}
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* 垂直 4 步骤流程列表 (100% 精确对标截图) */}
+                  <div className="space-y-4 pt-1 pl-1">
+                    {/* 步骤 1: 客户已打开会话码 */}
+                    <div className="flex items-center gap-3">
+                      {flowStep >= 1 ? (
+                        <div className="w-4 h-4 rounded-full border border-emerald-500/80 bg-emerald-500/10 flex items-center justify-center text-emerald-400 shrink-0">
+                          <Check className="w-2.5 h-2.5 stroke-[3]" />
+                        </div>
+                      ) : (
+                        <div className="w-2 h-2 rounded-full bg-white/30 ml-1 mr-1 shrink-0" />
+                      )}
+                      <span className={`text-xs font-medium ${flowStep >= 1 ? 'text-white/80' : 'text-white/40'}`}>
+                        {lang === 'zh' ? '客户已打开会话码' : 'Customer opened session code'}
+                      </span>
+                    </div>
+
+                    {/* 步骤 2: 正在下载连接模块 */}
+                    <div className="flex items-center gap-3">
+                      {flowStep >= 2 ? (
+                        <div className="w-4 h-4 rounded-full border border-emerald-500/80 bg-emerald-500/10 flex items-center justify-center text-emerald-400 shrink-0">
+                          <Check className="w-2.5 h-2.5 stroke-[3]" />
+                        </div>
+                      ) : (
+                        <div className="w-2 h-2 rounded-full bg-white/30 ml-1 mr-1 shrink-0" />
+                      )}
+                      <span className={`text-xs font-medium ${flowStep >= 2 ? 'text-white/80' : 'text-white/40'}`}>
+                        {lang === 'zh' ? '正在下载连接模块' : 'Downloading connection module'}
+                      </span>
+                    </div>
+
+                    {/* 步骤 3: 正在选择最佳服务器 (紫色缺口微型旋转圈) */}
+                    <div className="flex items-center gap-3">
+                      {flowStep < 3 ? (
+                        <div className="w-2 h-2 rounded-full bg-white/30 ml-1 mr-1 shrink-0" />
+                      ) : flowStep === 3 ? (
+                        <div 
+                          className="w-4 h-4 rounded-full border-[2px] border-purple-400 border-t-transparent animate-spin shrink-0"
+                          style={{ borderColor: `${accentColor} transparent ${accentColor} ${accentColor}` }}
+                        />
+                      ) : (
+                        <div className="w-4 h-4 rounded-full border border-emerald-500/80 bg-emerald-500/10 flex items-center justify-center text-emerald-400 shrink-0">
+                          <Check className="w-2.5 h-2.5 stroke-[3]" />
+                        </div>
+                      )}
+                      <span className={`text-xs font-medium ${flowStep === 3 ? 'text-white/90 font-semibold' : flowStep > 3 ? 'text-white/80' : 'text-white/40'}`}>
+                        {flowStep > 3
+                          ? (lang === 'zh' ? `已选择最佳服务器 (${selectedRelayServer.countryName} · ${selectedRelayServer.pingMs}ms)` : `Optimal server selected (${selectedRelayServer.countryName})`)
+                          : (lang === 'zh' ? '正在选择最佳服务器' : 'Selecting optimal server')}
+                      </span>
+                    </div>
+
+                    {/* 步骤 4: 正在建立安全隧道 */}
+                    <div className="flex items-center gap-3">
+                      {flowStep < 4 ? (
+                        <div className="w-2 h-2 rounded-full bg-white/30 ml-1 mr-1 shrink-0" />
+                      ) : flowStep === 4 ? (
+                        <div 
+                          className="w-4 h-4 rounded-full border-[2px] border-purple-400 border-t-transparent animate-spin shrink-0"
+                          style={{ borderColor: `${accentColor} transparent ${accentColor} ${accentColor}` }}
+                        />
+                      ) : (
+                        <div className="w-4 h-4 rounded-full border border-emerald-500/80 bg-emerald-500/10 flex items-center justify-center text-emerald-400 shrink-0">
+                          <Check className="w-2.5 h-2.5 stroke-[3]" />
+                        </div>
+                      )}
+                      <span className={`text-xs font-medium ${flowStep === 4 ? 'text-white/90 font-semibold' : flowStep >= 5 ? 'text-emerald-400 font-semibold' : 'text-white/40'}`}>
+                        {flowStep >= 5
+                          ? (lang === 'zh' ? '安全隧道已就绪 (AES-256-GCM 加密通道)' : 'Secure tunnel active (AES-256-GCM)')
+                          : (lang === 'zh' ? '正在建立安全隧道' : 'Establishing secure tunnel')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 车辆连接就绪状态卡片 (连接成功后动态呈现) */}
+                  {flowStep >= 5 && (
+                    <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs space-y-2.5 animate-in fade-in">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-emerald-400 font-bold">
+                          <Car className="w-4 h-4" />
+                          <span>{lang === 'zh' ? '车辆已就绪 · ENET (DoIP) 诊断通道就绪' : 'Vehicle Ready · ENET (DoIP) Tunnel Active'}</span>
+                        </div>
+                        <span className="text-[11px] font-mono text-emerald-400/80 bg-emerald-500/20 px-2 py-0.5 rounded">
+                          PING: {selectedRelayServer.pingMs}ms
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-white/70">
+                        <div>
+                          <span className="text-white/40 block text-[10px]">{lang === 'zh' ? '车辆 VIN 码' : 'Vehicle VIN'}</span>
+                          <span className="font-mono text-white font-semibold">WBA3A5C59KP18204</span>
+                        </div>
+                        <div>
+                          <span className="text-white/40 block text-[10px]">{lang === 'zh' ? '车辆 IP 地址' : 'Vehicle IP'}</span>
+                          <span className="font-mono text-white">169.254.88.192</span>
+                        </div>
+                        <div>
+                          <span className="text-white/40 block text-[10px]">{lang === 'zh' ? '诊断端口转发' : 'Port Forwarding'}</span>
+                          <span className="font-mono text-emerald-300">22, 6801, 6811</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 底部操作行 */}
+                  <div className="pt-3 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.06]">
+                    {/* 左侧：放弃按钮 */}
+                    <button
+                      onClick={handleCancelCodingSession}
+                      className="bg-[#242733] hover:bg-[#2e3344] text-white/90 text-xs px-5 py-2 rounded-lg transition-colors border border-white/5 shadow-sm active:scale-95 font-medium cursor-pointer"
+                    >
+                      {lang === 'zh' ? '放弃' : 'Cancel'}
                     </button>
 
-                    {!showCreatedToast && (
+                    {/* 右侧：便捷测试与配置操作 */}
+                    <div className="flex items-center gap-2.5">
+                      {/* 一键模拟对端客户接入状态 (测试运行逻辑) */}
                       <button
-                        onClick={() => setShowCreatedToast(true)}
-                        className="text-[11px] text-sky-400/80 hover:text-sky-300 underline transition-all"
+                        onClick={handleSimulateClientJoin}
+                        className={`text-xs px-3 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+                          flowStep >= 5
+                            ? 'bg-white/5 border-white/10 text-white/70 hover:text-white'
+                            : 'bg-emerald-600/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/30'
+                        }`}
+                        title={lang === 'zh' ? '模拟对端客户打开并完成连接以验证完整流程' : 'Simulate client connection to test complete workflow'}
                       >
-                        {lang === 'zh' ? '显示提示条' : 'Show banner'}
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>
+                          {flowStep >= 5
+                            ? (lang === 'zh' ? '重设连接测试' : 'Reset Test')
+                            : (lang === 'zh' ? '模拟客户接入测试' : 'Simulate Client Join')}
+                        </span>
                       </button>
-                    )}
+
+                      {/* 切换到接收端 */}
+                      {onSwitchToTech && (
+                        <button
+                          onClick={onSwitchToTech}
+                          className="bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 text-xs px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                          title={lang === 'zh' ? '前往接收端输入此会话码' : 'Go to receiver side'}
+                        >
+                          <Terminal className="w-3.5 h-3.5" />
+                          <span>{lang === 'zh' ? '在接收端测试' : 'Test in Tech Tab'}</span>
+                        </button>
+                      )}
+
+                      {/* 服务器配置 */}
+                      <button
+                        onClick={() => setShowServerConfigModal(true)}
+                        className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1.5 transition-colors cursor-pointer px-2 py-1"
+                      >
+                        <Settings className="w-3.5 h-3.5" />
+                        <span>{lang === 'zh' ? '服务器配置' : 'Relay'}</span>
+                      </button>
+
+                      {!showCreatedToast && (
+                        <button
+                          onClick={() => setShowCreatedToast(true)}
+                          className="text-[11px] text-sky-400/80 hover:text-sky-300 underline transition-all cursor-pointer"
+                        >
+                          {lang === 'zh' ? '提示条' : 'Toast'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           ) : (
-            /* ======================= 状态 2: 初始创建表单 (对标截图 1) ======================= */
-            <div className="bg-[#12141a] border border-white/[0.08] rounded-2xl p-6 shadow-xl space-y-5 animate-in fade-in duration-200">
+            /* ======================= 状态 2: 初始创建表单 (高度还原截图) ======================= */
+            <div className="bg-[#151821] border border-[#212635] rounded-xl p-7 shadow-sm space-y-5 animate-in fade-in duration-200">
               {/* + 创建新会话 按钮 */}
               <div>
                 <button
                   onClick={handleCreateNewSession}
                   disabled={isCreating}
-                  className="px-6 py-2.5 rounded-xl text-white text-xs sm:text-sm font-bold transition-all shadow-lg flex items-center gap-2 active:scale-95 disabled:opacity-50"
+                  className="w-auto min-w-[210px] inline-flex items-center justify-center gap-2 px-7 py-3 rounded-lg text-white text-sm font-semibold transition-all shadow-sm active:scale-95 disabled:opacity-50 bg-[#9333ea] hover:bg-[#8b5cf6]"
                   style={{ 
                     backgroundColor: accentColor,
-                    boxShadow: `0 10px 25px -5px ${accentColor}40`
+                    boxShadow: `0 4px 14px 0 ${accentColor}30`
                   }}
                 >
                   {isCreating ? (
@@ -581,8 +813,8 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
               </div>
 
               {/* 客户电子邮件（可选） */}
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-white/70 block">
+              <div className="space-y-2 pt-1">
+                <label className="text-sm font-medium text-gray-300 block">
                   {lang === 'zh' ? '客户电子邮件（可选）' : 'Customer Email (Optional)'}
                 </label>
 
@@ -591,10 +823,10 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
                   value={customerEmail}
                   onChange={(e) => setCustomerEmail(e.target.value)}
                   placeholder="name@example.com"
-                  className="w-full max-w-md bg-[#191b22] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder:text-white/30 outline-none focus:border-[#a855f7] transition-all"
+                  className="w-full max-w-xl bg-[#1a1f2c] border border-[#282f42] rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-gray-500 outline-none focus:border-[#9333ea] transition-all"
                 />
 
-                <p className="text-xs text-white/40 leading-relaxed max-w-2xl">
+                <p className="text-xs text-gray-400 mt-2.5 leading-relaxed max-w-3xl">
                   {lang === 'zh'
                     ? '如果客户在其程序中保存了此电子邮件，会话会自动以邀请的形式出现在那里 - 无需会话码。'
                     : 'If the customer saved this email in their software, the session appears automatically as an invite there - no code needed.'}
@@ -619,22 +851,22 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
             </div>
           )}
 
-          {/* 卡片 2: 过往会话 (对标截图 1: 带向下的折叠箭头，可展开查看) */}
-          <div className="bg-[#12141a] border border-white/[0.08] rounded-2xl p-6 shadow-xl space-y-4">
+          {/* 卡片 2: 过往会话 (对标截图: 默认展开，带向上的折叠箭头) */}
+          <div className="bg-[#151821] border border-[#212635] rounded-xl p-6 sm:p-7 shadow-sm space-y-4">
             {/* 卡片头部与折叠切换 */}
             <div 
               onClick={() => setIsPastSessionsOpen(!isPastSessionsOpen)}
-              className="flex items-start justify-between cursor-pointer"
+              className="flex items-start justify-between cursor-pointer select-none"
             >
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 text-white/80">
-                  <History className="w-5 h-5 stroke-[2]" />
+              <div className="flex items-start gap-3.5">
+                <div className="mt-0.5 text-gray-300">
+                  <History className="w-6 h-6 stroke-[2]" />
                 </div>
                 <div>
-                  <div className="text-sm font-semibold text-white">
+                  <div className="text-base font-semibold text-white">
                     {lang === 'zh' ? '过往会话' : 'Past Sessions'}
                   </div>
-                  <p className="text-xs text-white/40 pt-0.5">
+                  <p className="text-xs text-gray-400 pt-0.5">
                     {lang === 'zh'
                       ? '一键邀请曾经的客户加入新会话 - 无需新会话码即可加入。'
                       : 'One-click invite previous clients to a new session - join without a new code.'}
@@ -642,7 +874,7 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
                 </div>
               </div>
 
-              <button className="text-white/40 hover:text-white p-1">
+              <button className="text-gray-400 hover:text-white p-1">
                 {isPastSessionsOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </button>
             </div>
@@ -653,10 +885,10 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
                 {pastClients.map((client) => (
                   <div
                     key={client.id}
-                    className="bg-[#191b22] border border-white/[0.06] hover:border-white/15 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all"
+                    className="bg-[#181c26] border border-[#242a3a] hover:border-[#333b50] rounded-lg p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all"
                   >
                     {/* 左侧设备与客户信息 */}
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="text-base leading-none">{client.countryFlag}</span>
                         
@@ -666,7 +898,7 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
                               type="text"
                               value={editingClientName}
                               onChange={(e) => setEditingClientName(e.target.value)}
-                              className="bg-[#0e1015] border border-[#a855f7] rounded px-2 py-0.5 text-xs text-white outline-none"
+                              className="bg-[#0e1015] border border-[#9333ea] rounded px-2 py-0.5 text-xs text-white outline-none"
                               autoFocus
                             />
                             <button
@@ -677,7 +909,7 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
                             </button>
                           </div>
                         ) : (
-                          <span className="text-xs font-bold text-white tracking-wide">
+                          <span className="text-sm font-semibold text-white tracking-wide font-mono">
                             {client.name}
                           </span>
                         )}
@@ -688,22 +920,22 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
                               setEditingClientId(client.id);
                               setEditingClientName(client.name);
                             }}
-                            className="text-white/30 hover:text-white/70 p-0.5 transition-colors"
+                            className="text-gray-400 hover:text-white p-0.5 transition-colors"
                             title={lang === 'zh' ? '编辑别名' : 'Edit alias'}
                           >
-                            <Edit2 className="w-3 h-3" />
+                            <Edit2 className="w-3.5 h-3.5" />
                           </button>
                         )}
 
                         {/* 在线状态 */}
-                        <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-medium ml-1">
+                        <span className="flex items-center gap-1 text-xs text-emerald-400 font-medium ml-2">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                           <span>{lang === 'zh' ? '在线' : 'Online'}</span>
                         </span>
                       </div>
 
                       {/* 次级信息 */}
-                      <div className="text-xs text-white/50 flex items-center gap-2">
+                      <div className="text-xs text-gray-400 flex items-center gap-2 pt-0.5">
                         <span>
                           {client.hasSavedEmail
                             ? (lang === 'zh' ? '已保存电子邮件' : 'Saved email')
@@ -716,7 +948,7 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
                       </div>
 
                       {/* 时间 */}
-                      <div className="text-[11px] font-mono text-white/40">
+                      <div className="text-xs font-mono text-gray-400 pt-0.5">
                         {client.lastSessionTime}
                       </div>
                     </div>
@@ -725,10 +957,10 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
                     <div className="flex items-center gap-2 self-end sm:self-center">
                       <button
                         onClick={() => handleReinviteClient(client)}
-                        className="px-4 py-2 rounded-xl text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 hover:opacity-90 active:scale-95"
+                        className="px-4 py-2 rounded-lg text-white text-xs font-semibold transition-all shadow-sm flex items-center gap-1.5 hover:opacity-95 active:scale-95 bg-[#9333ea] hover:bg-[#8b5cf6]"
                         style={{ backgroundColor: accentColor }}
                       >
-                        <Key className="w-3.5 h-3.5" />
+                        <RefreshCw className="w-3.5 h-3.5" />
                         <span>{lang === 'zh' ? '再次提供' : 'Provide Again'}</span>
                       </button>
                     </div>
@@ -738,22 +970,22 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
             )}
           </div>
 
-          {/* 卡片 3: 计划中和进行中的会话 (对标截图 1: 带向下的折叠箭头，可展开查看) */}
-          <div className="bg-[#12141a] border border-white/[0.08] rounded-2xl p-6 shadow-xl space-y-4">
+          {/* 卡片 3: 计划中和进行中的会话 (对标截图: 默认收起，带向下的折叠箭头) */}
+          <div className="bg-[#151821] border border-[#212635] rounded-xl p-6 sm:p-7 shadow-sm space-y-4">
             {/* 卡片头部与折叠切换 */}
             <div 
               onClick={() => setIsScheduledSessionsOpen(!isScheduledSessionsOpen)}
-              className="flex items-start justify-between cursor-pointer"
+              className="flex items-start justify-between cursor-pointer select-none"
             >
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 text-white/80">
-                  <CalendarClock className="w-5 h-5 stroke-[2]" />
+              <div className="flex items-start gap-3.5">
+                <div className="mt-0.5 text-gray-300">
+                  <CalendarClock className="w-6 h-6 stroke-[2]" />
                 </div>
                 <div>
-                  <div className="text-sm font-semibold text-white">
+                  <div className="text-base font-semibold text-white">
                     {lang === 'zh' ? '计划中和进行中的会话' : 'Scheduled & Ongoing Sessions'}
                   </div>
-                  <p className="text-xs text-white/40 pt-0.5">
+                  <p className="text-xs text-gray-400 pt-0.5">
                     {lang === 'zh'
                       ? '提前为客户提供预约：链接会立即发送，连接会在预约时间前 15 分钟自动开放。'
                       : 'Offer appointments in advance: Links sent instantly, connection opens 15 min before.'}
@@ -761,7 +993,7 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
                 </div>
               </div>
 
-              <button className="text-white/40 hover:text-white p-1">
+              <button className="text-gray-400 hover:text-white p-1">
                 {isScheduledSessionsOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </button>
             </div>
@@ -813,7 +1045,7 @@ export const ProvideSessionView: React.FC<ProvideSessionViewProps> = ({
                           )}
 
                           <button
-                            onClick={() => onDeleteSession(sess.id)}
+                            onClick={(e) => onDeleteSession(sess.id, e)}
                             className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 text-xs font-medium transition-all"
                           >
                             {lang === 'zh' ? '结束' : 'End'}

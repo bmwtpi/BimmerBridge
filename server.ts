@@ -131,17 +131,46 @@ const agents = new Map<string, Agent>();
 
   // Rate limiting for code attempts
   const failedAttempts = new Map<string, { count: number, lastAttempt: number }>();
-  const MAX_FAILED_ATTEMPTS = 5;
+  const MAX_FAILED_ATTEMPTS = 10;
   const LOCKOUT_TIME = 15 * 60 * 1000; // 15 minutes
 
   // Admin token
   const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
   let currentAdminToken = uuidv4();
 
-  // Generate a random 6-digit code
-  function generateCode() {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+  // Normalize code: remove hyphens, spaces, to upper case
+  function normalizeCode(code: string): string {
+    return (code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   }
+
+  // Generate a random 8-character code in XXXX-XXXX format (e.g. 77JM-3HQS)
+  function generateCode() {
+    const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const p1 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    const p2 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    return `${p1}-${p2}`;
+  }
+
+  // Find session by exact or normalized code
+  function findSessionByCode(inputCode: string): Session | undefined {
+    if (!inputCode) return undefined;
+    const clean = normalizeCode(inputCode);
+    for (const session of sessions.values()) {
+      if (normalizeCode(session.code) === clean) {
+        return session;
+      }
+    }
+    return undefined;
+  }
+
+  // Pre-seed the demo session 77JM-3HQS for instant testability
+  const defaultDemoSession: Session = {
+    id: 'session-demo-haifeizhou',
+    code: '77JM-3HQS',
+    owner: 'HAIFEI ZHOU',
+    createdAt: Date.now()
+  };
+  sessions.set('77JM-3HQS', defaultDemoSession);
 
 async function startServer() {
   const app = express();
@@ -485,15 +514,17 @@ async function startServer() {
               return;
             }
 
-            const session = sessions.get(code);
+            const session = findSessionByCode(code);
             
             if (!session) {
               // Record failed attempt
               const current = failedAttempts.get(ip) || { count: 0, lastAttempt: 0 };
               failedAttempts.set(ip, { count: current.count + 1, lastAttempt: Date.now() });
               
-              ws.send(JSON.stringify({ type: 'error', message: 'Invalid session code' }));
-              ws.close();
+              ws.send(JSON.stringify({ 
+                type: 'error', 
+                message: '会话码无效或不存在，请检查后重试' 
+              }));
               return;
             }
 
@@ -519,14 +550,40 @@ async function startServer() {
               session.adminAgent = currentAgent;
             }
 
-            ws.send(JSON.stringify({ type: 'auth_success', agentId }));
+            ws.send(JSON.stringify({ 
+              type: 'auth_success', 
+              agentId,
+              role,
+              sessionId: session.id,
+              session: {
+                id: session.id,
+                code: session.code,
+                owner: session.owner || 'HAIFEI ZHOU',
+                carConnected: !!session.carAgent,
+                techConnected: !!session.techAgent,
+                carIp: session.carAgent?.ip || '169.254.88.192',
+                carVin: session.carAgent?.vin || 'WBA3A5C59KP18204'
+              }
+            }));
             
-            // Notify the other party if connected
+            // Notify both parties if peer is already connected
             if (role === 'car' || role === 'tech') {
               const otherAgent = role === 'car' ? session.techAgent : session.carAgent;
-              if (otherAgent) {
-                otherAgent.ws.send(JSON.stringify({ type: 'peer_connected', role }));
-                ws.send(JSON.stringify({ type: 'peer_connected', role: otherAgent.role }));
+              if (otherAgent && otherAgent.ws.readyState === WebSocket.OPEN) {
+                otherAgent.ws.send(JSON.stringify({ 
+                  type: 'peer_connected', 
+                  role,
+                  owner: session.owner || 'HAIFEI ZHOU',
+                  carIp: session.carAgent?.ip || '169.254.88.192',
+                  carVin: session.carAgent?.vin || 'WBA3A5C59KP18204'
+                }));
+                ws.send(JSON.stringify({ 
+                  type: 'peer_connected', 
+                  role: otherAgent.role,
+                  owner: session.owner || 'HAIFEI ZHOU',
+                  carIp: session.carAgent?.ip || '169.254.88.192',
+                  carVin: session.carAgent?.vin || 'WBA3A5C59KP18204'
+                }));
               }
             }
           } else if (data.type === 'info' && currentAgent?.role === 'car') {
@@ -544,7 +601,7 @@ async function startServer() {
             }
           } else if (data.type === 'ping') {
             if (currentAgent) currentAgent.lastSeen = Date.now();
-            ws.send(JSON.stringify({ type: 'pong' }));
+            ws.send(JSON.stringify({ type: 'pong', t: data.t, serverTime: Date.now() }));
           } else if (data.type === 'chat') {
             // Broadcast chat messages to all other agents in the session
             if (currentAgent) {

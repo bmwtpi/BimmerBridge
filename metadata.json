@@ -1,6 +1,6 @@
 {
-  "name": "BimmerBridge ENET",
-  "description": "Professional remote BMW ENET programming and diagnostics bridge with real-time status tracking and secure communication.",
+  "name": "泰兴悦之宝 Connect",
+  "description": "泰兴悦之宝 Connect 专业汽车远程编程、诊断及品牌定制客户端",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
